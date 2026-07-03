@@ -1,8 +1,7 @@
 import { createWidget } from 'expo-widgets';
-import MeteoblickWidget from '../../widgets/MeteoblickWidget';
 
-// Create widget instance
-export const meteoblickWidget = createWidget('MeteoblickWidget', MeteoblickWidget);
+// Create widget instance - references the compiled native widget
+export const meteoblickWidget = createWidget('MeteoblickWidget');
 
 // Widget props type
 export interface WidgetProps {
