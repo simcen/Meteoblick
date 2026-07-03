@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeBottomTabNavigator } from '@bottom-tabs/react-navigation';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Platform } from 'react-native';
 import { registerBackgroundFetch } from '../src/tasks/weatherBackgroundTask';
 
 import HomeScreen from '../src/screens/HomeScreen';
@@ -12,6 +13,14 @@ import DebugScreen from '../src/screens/DebugScreen';
 import '../widgets/MeteoblickWidget';
 
 const Tabs = createNativeBottomTabNavigator();
+
+// SF Symbols for iOS (Apple HIG compliant)
+// Returns a function that renders the icon with proper props
+const TabBarIcon = (sfSymbolName: string) => {
+  return () => ({
+    sfSymbol: sfSymbolName,
+  });
+};
 
 export default function RootLayout() {
   useEffect(() => {
@@ -27,6 +36,8 @@ export default function RootLayout() {
             component={HomeScreen}
             options={{
               title: 'Wetter',
+              tabBarIcon: TabBarIcon('cloud.sun.fill'),
+              tabBarAccessibilityLabel: 'Wetter-Tab',
             }}
           />
           <Tabs.Screen
@@ -34,6 +45,8 @@ export default function RootLayout() {
             component={SmartHomeScreen}
             options={{
               title: 'Smart Home',
+              tabBarIcon: TabBarIcon('house.fill'),
+              tabBarAccessibilityLabel: 'Smart Home Tab',
             }}
           />
           <Tabs.Screen
@@ -41,6 +54,8 @@ export default function RootLayout() {
             component={DebugScreen}
             options={{
               title: 'Debug',
+              tabBarIcon: TabBarIcon('wrench.and.screwdriver.fill'),
+              tabBarAccessibilityLabel: 'Debug-Tab',
             }}
           />
         </Tabs.Navigator>

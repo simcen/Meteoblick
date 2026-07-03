@@ -1,6 +1,6 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { OpenAPIHono } from '@hono/zod-openapi';
-import * as db from '../services/db.js';
+import * as db from './services/db.js';
 
 const POISchema = z.object({
   id: z.string().openapi({ example: '1' }),

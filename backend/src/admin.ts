@@ -1,7 +1,7 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { OpenAPIHono } from '@hono/zod-openapi';
-import { requireAdminToken } from '../middleware/auth.js';
-import { syncWeatherData } from '../cron/sync-weather.js';
+import { requireAdminToken } from './middleware/auth.js';
+import { syncWeatherData } from './cron/sync-weather.js';
 
 const SyncResponseSchema = z.object({
   success: z.boolean(),

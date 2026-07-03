@@ -1,5 +1,5 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
-import { getWeatherSyncStatus } from '../services/db.js';
+import { getWeatherSyncStatus } from './services/db.js';
 
 const DebugInfoSchema = z.object({
   backend: z.object({

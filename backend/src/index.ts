@@ -6,10 +6,11 @@ import { apiReference } from '@scalar/hono-api-reference';
 import cron from 'node-cron';
 import { initDatabase } from './services/db.js';
 import { syncWeatherData } from './cron/sync-weather.js';
-import { weatherRouter } from './routes/weather.js';
-import { poisRouter } from './routes/pois.js';
-import { adminRouter } from './routes/admin.js';
-import { debugRouter } from './routes/debug.js';
+// Routes are in the same directory, not in routes/ subfolder
+import { weatherRouter } from './weather.js';
+import { poisRouter } from './pois.js';
+import { adminRouter } from './admin.js';
+import { debugRouter } from './debug.js';
 
 const app = new OpenAPIHono();
 
