@@ -3,13 +3,11 @@ import { View, Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform, Touc
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SharedStorage } from '../storage/SharedStorage';
 import { MeteoSwissAPI } from '../api/meteoswiss';
-import { NativeModules } from 'react-native';
-
-const { WidgetReloadBridge } = NativeModules;
+import { updateWidget } from '../widgets/widgetManager';
 import type { WeatherData } from '../types/weather';
 import type { POI } from '../types/poi';
 
-const BUILD_NUMBER = '260703-1332';
+const BUILD_NUMBER = '260703-1400';
 
 export default function HomeScreen() {
   const [pointId, setPointId] = useState('');
@@ -124,16 +122,18 @@ export default function HomeScreen() {
       await SharedStorage.setPointId(selectedPOI.id);
       setPointId(selectedPOI.id);
 
-      // Fetch weather data from API (this caches it in SharedStorage)
-      await fetchWeatherData(selectedPOI.id);
+      // Fetch weather data from API
+      const weather = await fetchWeatherData(selectedPOI.id);
 
-      // Force widget reload - widget reads from SharedStorage
-      console.log('🔄 Calling WidgetReloadBridge.reloadAllTimelines()');
-      if (WidgetReloadBridge) {
-        WidgetReloadBridge.reloadAllTimelines();
-        console.log('✅ Widget reload triggered');
-      } else {
-        console.warn('❌ WidgetReloadBridge not available');
+      // Update widget with new data
+      if (weather) {
+        await updateWidget({
+          locationName: weather.locationName,
+          temperature: weather.temperature,
+          symbolCode: weather.symbolCode,
+          precipitation: weather.precipitation,
+          buildNumber: BUILD_NUMBER,
+        });
       }
 
       Alert.alert(
