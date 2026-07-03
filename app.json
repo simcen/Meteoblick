@@ -47,7 +47,8 @@
                 "description": "Wetterprognose für gewählten Standort",
                 "families": [
                   "systemSmall"
-                ]
+                ],
+                "targetPath": "widgets"
               }
             ]
           }
