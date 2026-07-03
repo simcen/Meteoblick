@@ -68,6 +68,24 @@ const MeteoblickWidget = (
   const isFullColor =
     environment.widgetRenderingMode == null || environment.widgetRenderingMode === 'fullColor';
 
+  // Responsive sizing based on widget family
+  const family = environment.widgetFamily;
+  const isSmall = family === 'systemSmall' || family === 'accessoryCircular' || family === 'accessoryRectangular';
+  const isMedium = family === 'systemMedium';
+  const isLarge = family === 'systemLarge' || family === 'systemExtraLarge';
+
+  // Adaptive font sizes
+  const headerFontSize = isSmall ? 10 : isMedium ? 12 : 14;
+  const iconFontSize = isSmall ? 16 : isMedium ? 20 : 24;
+  const tempFontSize = isSmall ? 24 : isMedium ? 32 : 40;
+  const unitFontSize = isSmall ? 12 : isMedium ? 16 : 20;
+  const precipFontSize = isSmall ? 10 : isMedium ? 12 : 14;
+  const buildFontSize = isSmall ? 8 : 9;
+
+  // Adaptive spacing
+  const containerPadding = isSmall ? 8 : isMedium ? 12 : 16;
+  const contentSpacing = isSmall ? 2 : 4;
+
   return (
     <ZStack
       alignment="leading"
@@ -94,17 +112,17 @@ const MeteoblickWidget = (
       {/* Content */}
       <VStack
         alignment="leading"
-        spacing={4}
+        spacing={contentSpacing}
         modifiers={[
           frame({ maxWidth: Infinity, maxHeight: Infinity, alignment: 'leading' }),
-          padding({ all: 12 }),
+          padding({ all: containerPadding }),
         ]}
       >
         {/* Header */}
-        <HStack spacing={6} alignment="center">
+        <HStack spacing={contentSpacing + 2} alignment="center">
           <Text
             modifiers={[
-              font({ size: 12, weight: 'semibold' }),
+              font({ size: headerFontSize, weight: 'semibold' }),
               foregroundStyle('#FFFFFF')
             ]}
             lineLimit={1}
@@ -112,7 +130,7 @@ const MeteoblickWidget = (
             {props.locationName || 'Keine Daten'}
           </Text>
           <Spacer />
-          <Text modifiers={[font({ size: 20 })]}>
+          <Text modifiers={[font({ size: iconFontSize })]}>
             {weatherIcon}
           </Text>
         </HStack>
@@ -121,19 +139,19 @@ const MeteoblickWidget = (
 
         {/* Temperature */}
         <HStack spacing={2}>
-          <Text modifiers={[font({ size: 32, weight: 'bold' }), foregroundStyle('#FFFFFF')]}>
+          <Text modifiers={[font({ size: tempFontSize, weight: 'bold' }), foregroundStyle('#FFFFFF')]}>
             {props.temperature?.toFixed(1) || '--'}
           </Text>
-          <Text modifiers={[font({ size: 16, weight: 'medium' }), foregroundStyle('#FFFFFF')]}>
+          <Text modifiers={[font({ size: unitFontSize, weight: 'medium' }), foregroundStyle('#FFFFFF')]}>
             °C
           </Text>
         </HStack>
 
-        {/* Precipitation */}
-        {props.precipitation > 0 && (
-          <HStack spacing={4}>
-            <Text modifiers={[font({ size: 12 })]}>💧</Text>
-            <Text modifiers={[font({ size: 12, weight: 'medium' }), foregroundStyle('#FFFFFF')]}>
+        {/* Precipitation - hide on small widgets to save space */}
+        {props.precipitation > 0 && !isSmall && (
+          <HStack spacing={contentSpacing}>
+            <Text modifiers={[font({ size: precipFontSize })]}>💧</Text>
+            <Text modifiers={[font({ size: precipFontSize, weight: 'medium' }), foregroundStyle('#FFFFFF')]}>
               {props.precipitation.toFixed(1)} mm
             </Text>
           </HStack>
@@ -141,13 +159,15 @@ const MeteoblickWidget = (
 
         <Spacer />
 
-        {/* Build number */}
-        <HStack>
-          <Spacer />
-          <Text modifiers={[font({ size: 9 }), foregroundStyle('#FFFFFF80')]}>
-            Build {props.buildNumber || 'dev'}
-          </Text>
-        </HStack>
+        {/* Build number - hide on very small widgets */}
+        {!isSmall && (
+          <HStack>
+            <Spacer />
+            <Text modifiers={[font({ size: buildFontSize }), foregroundStyle('#FFFFFF80')]}>
+              Build {props.buildNumber || 'dev'}
+            </Text>
+          </HStack>
+        )}
       </VStack>
     </ZStack>
   );
