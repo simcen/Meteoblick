@@ -15,6 +15,8 @@ interface WeatherProps {
   symbolCode: number;
   precipitation: number;
   buildNumber: string;
+  timestamp?: string; // ISO timestamp of weather data (from backend)
+  refreshedAt?: string; // ISO timestamp when widget was updated
 }
 
 /**
@@ -85,6 +87,15 @@ const MeteoblickWidget = (
   // Adaptive spacing
   const containerPadding = isSmall ? 8 : isMedium ? 12 : 16;
   const contentSpacing = isSmall ? 2 : 4;
+
+  // Format timestamp for display (only show time, not date)
+  const formatTimestamp = (isoString?: string): string => {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
 
   return (
     <ZStack
@@ -159,9 +170,19 @@ const MeteoblickWidget = (
 
         <Spacer />
 
-        {/* Build number - hide on very small widgets */}
+        {/* Timestamp and Build number - hide on very small widgets */}
         {!isSmall && (
-          <HStack>
+          <HStack spacing={8}>
+            {props.timestamp && (
+              <Text modifiers={[font({ size: buildFontSize }), foregroundStyle('#FFFFFF80')]}>
+                📊 {formatTimestamp(props.timestamp)}
+              </Text>
+            )}
+            {props.refreshedAt && (
+              <Text modifiers={[font({ size: buildFontSize }), foregroundStyle('#FFFFFF80')]}>
+                🔄 {formatTimestamp(props.refreshedAt)}
+              </Text>
+            )}
             <Spacer />
             <Text modifiers={[font({ size: buildFontSize }), foregroundStyle('#FFFFFF80')]}>
               Build {props.buildNumber || 'dev'}

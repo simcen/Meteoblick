@@ -31,7 +31,7 @@ const getDebugInfoRoute = createRoute({
 
 debugRouter.openapi(getDebugInfoRoute, async (c) => {
   const syncStatus = await getWeatherSyncStatus();
-  const syncIntervalMinutes = 60; // Cron runs hourly
+  const syncIntervalMinutes = 5; // Cron runs every 5 minutes
 
   let nextSync: string | null = null;
   if (syncStatus?.lastSync) {

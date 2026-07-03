@@ -2,6 +2,8 @@ import * as BackgroundFetch from 'expo-background-fetch';
 import * as TaskManager from 'expo-task-manager';
 import { SharedStorage } from '../storage/SharedStorage';
 import { MeteoSwissAPI } from '../api/meteoswiss';
+import { updateWidget } from '../widgets/widgetManager';
+import { BUILD_NUMBER } from '../constants';
 
 const WEATHER_BACKGROUND_TASK = 'weather-background-fetch';
 
@@ -18,7 +20,17 @@ TaskManager.defineTask(WEATHER_BACKGROUND_TASK, async () => {
     const weather = await MeteoSwissAPI.fetchWeatherData(pointId);
     await SharedStorage.setWeatherData(weather);
 
-    console.log('[Background] Weather data updated:', weather.temperature);
+    // Update widget with new data
+    await updateWidget({
+      locationName: weather.locationName,
+      temperature: weather.temperature,
+      symbolCode: weather.symbolCode,
+      precipitation: weather.precipitation,
+      buildNumber: BUILD_NUMBER,
+      timestamp: weather.timestamp,
+    });
+
+    console.log('[Background] Weather data + widget updated:', weather.temperature);
 
     return BackgroundFetch.BackgroundFetchResult.NewData;
   } catch (error) {
@@ -33,11 +45,11 @@ export async function registerBackgroundFetch() {
 
     if (status === BackgroundFetch.BackgroundFetchStatus.Available) {
       await BackgroundFetch.registerTaskAsync(WEATHER_BACKGROUND_TASK, {
-        minimumInterval: 60 * 30,
+        minimumInterval: 60 * 15, // 15 minutes (iOS minimum)
         stopOnTerminate: false,
         startOnBoot: true,
       });
-      console.log('[Background] Task registered successfully');
+      console.log('[Background] Task registered successfully (15 min interval)');
     } else {
       console.log('[Background] Background fetch not available:', status);
     }

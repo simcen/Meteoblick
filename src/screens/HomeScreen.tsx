@@ -134,6 +134,7 @@ export default function HomeScreen() {
           symbolCode: weather.symbolCode,
           precipitation: weather.precipitation,
           buildNumber: BUILD_NUMBER,
+          timestamp: weather.timestamp,
         });
       }
 

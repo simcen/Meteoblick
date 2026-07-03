@@ -1,16 +1,21 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SharedStorage } from '../storage/SharedStorage';
 import { MeteoSwissAPI } from '../api/meteoswiss';
-
-const BUILD_NUMBER = '260703-1400';
+import { updateWidget } from '../widgets/widgetManager';
+import { Button } from '../components/Button';
+import { BUILD_NUMBER } from '../constants';
+import * as BackgroundFetch from 'expo-background-fetch';
+import * as TaskManager from 'expo-task-manager';
 
 export default function DebugScreen() {
   const [lastFetchInfo, setLastFetchInfo] = useState<any>(null);
   const [widgetLastRefresh, setWidgetLastRefresh] = useState<string | null>(null);
   const [backendDebugInfo, setBackendDebugInfo] = useState<any>(null);
   const [nextAppFetch, setNextAppFetch] = useState<string | null>(null);
+  const [bgFetchStatus, setBgFetchStatus] = useState<string>('unknown');
+  const [testing, setTesting] = useState(false);
 
   useEffect(() => {
     loadDebugInfo();
@@ -32,6 +37,15 @@ export default function DebugScreen() {
     const timestamp = await SharedStorage.getWidgetLastRefresh();
     setWidgetLastRefresh(timestamp);
 
+    // Check background fetch status
+    const status = await BackgroundFetch.getStatusAsync();
+    const statusMap: Record<number, string> = {
+      1: 'Available',
+      2: 'Denied',
+      3: 'Restricted',
+    };
+    setBgFetchStatus(statusMap[status] || 'Unknown');
+
     // Load backend debug info
     try {
       const response = await fetch('http://localhost:3000/api/debug');
@@ -46,6 +60,38 @@ export default function DebugScreen() {
       const lastFetchTime = new Date(info.timestamp).getTime();
       const nextFetchTime = lastFetchTime + 5 * 60 * 1000;
       setNextAppFetch(new Date(nextFetchTime).toISOString());
+    }
+  };
+
+  const testBackgroundFetch = async () => {
+    setTesting(true);
+    try {
+      console.log('[Debug] Testing background fetch manually...');
+
+      const pointId = await SharedStorage.getPointId();
+      if (!pointId) {
+        Alert.alert('Fehler', 'Kein POI konfiguriert');
+        return;
+      }
+
+      const weather = await MeteoSwissAPI.fetchWeatherData(pointId);
+      await SharedStorage.setWeatherData(weather);
+
+      await updateWidget({
+        locationName: weather.locationName,
+        temperature: weather.temperature,
+        symbolCode: weather.symbolCode,
+        precipitation: weather.precipitation,
+        buildNumber: BUILD_NUMBER,
+        timestamp: weather.timestamp,
+      });
+
+      Alert.alert('Erfolg', `Widget aktualisiert!\n\nTemp: ${weather.temperature}°C\nOrt: ${weather.locationName}`);
+      await loadDebugInfo();
+    } catch (error: any) {
+      Alert.alert('Fehler', error.message);
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -93,15 +139,23 @@ export default function DebugScreen() {
                 {widgetLastRefresh ? new Date(widgetLastRefresh).toLocaleString('de-CH') : 'n/a'}
               </Text>
             </View>
+
+            <Text style={styles.debugSectionTitle}>🔄 Background Fetch</Text>
             <View style={styles.debugRow}>
-              <Text style={styles.debugLabel}>Nächstes Refresh:</Text>
-              <Text style={styles.debugValue}>
-                {widgetLastRefresh ? new Date(new Date(widgetLastRefresh).getTime() + 30000).toLocaleString('de-CH') : 'n/a'}
-              </Text>
+              <Text style={styles.debugLabel}>Status:</Text>
+              <Text style={styles.debugValue}>{bgFetchStatus}</Text>
             </View>
             <View style={styles.debugRow}>
               <Text style={styles.debugLabel}>Intervall:</Text>
-              <Text style={styles.debugValue}>30 sec</Text>
+              <Text style={styles.debugValue}>15 min (iOS Minimum)</Text>
+            </View>
+            <View style={styles.debugButton}>
+              <Button
+                title="Background Fetch testen"
+                onPress={testBackgroundFetch}
+                loading={testing}
+                variant="secondary"
+              />
             </View>
 
             <Text style={styles.debugSectionTitle}>🖥️ Backend</Text>
@@ -177,5 +231,8 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     flex: 1,
     textAlign: 'right',
+  },
+  debugButton: {
+    marginTop: 16,
   },
 });

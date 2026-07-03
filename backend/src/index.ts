@@ -74,8 +74,8 @@ console.log('🚀 Initializing database...');
 await initDatabase();
 
 if (process.env.ENABLE_CRON !== 'false') {
-  console.log('⏰ Setting up hourly weather sync cron job...');
-  cron.schedule('0 * * * *', async () => {
+  console.log('⏰ Setting up 5-minute weather sync cron job...');
+  cron.schedule('*/5 * * * *', async () => {
     console.log('🔔 Cron triggered: syncing weather data');
     try {
       await syncWeatherData();
