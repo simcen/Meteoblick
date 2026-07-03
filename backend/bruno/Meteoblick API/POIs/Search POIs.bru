@@ -1,0 +1,24 @@
+meta {
+  name: Search POIs
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/pois?search=Zürich
+  body: none
+  auth: none
+}
+
+params:query {
+  search: Zürich
+}
+
+docs {
+  Search for POIs by name or postal code.
+
+  Examples:
+  - search=Zürich (location name)
+  - search=8001 (postal code)
+  - search=Arosa (station name)
+}
