@@ -4,6 +4,9 @@ export const WEATHER_DATA_KEY = 'meteoblick_weather_data';
 export const LAST_FETCH_KEY = 'meteoblick_last_fetch';
 export const WIDGET_LAST_REFRESH_KEY = 'meteoblick_widget_last_refresh';
 
+// Build number (update before each release)
+export const BUILD_NUMBER = '260703-2227';
+
 // API Configuration
 // Simulator: localhost maps to host machine
 export const API_BASE_URL = __DEV__

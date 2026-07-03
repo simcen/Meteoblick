@@ -6,10 +6,9 @@ import { MeteoSwissAPI } from '../api/meteoswiss';
 import { updateWidget } from '../widgets/widgetManager';
 import { Button } from '../components/Button';
 import { Colors, Typography, Spacing, Layout, ComponentStyles } from '../constants/designSystem';
+import { BUILD_NUMBER } from '../constants';
 import type { WeatherData } from '../types/weather';
 import type { POI } from '../types/poi';
-
-const BUILD_NUMBER = '260703-1400';
 
 export default function HomeScreen() {
   const [pointId, setPointId] = useState('');

@@ -45,7 +45,9 @@
               "displayName": "Meteoblick",
               "description": "Wetterprognose für gewählten Standort",
               "supportedFamilies": [
-                "systemSmall"
+                "systemSmall",
+                "systemMedium",
+                "systemLarge"
               ],
               "contentMarginsDisabled": true
             }
