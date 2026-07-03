@@ -1,0 +1,8 @@
+{
+  "android": {
+    "package": "com.simcen.meteoblickbackend"
+  },
+  "ios": {
+    "bundleIdentifier": "com.simcen.meteoblickbackend"
+  }
+}

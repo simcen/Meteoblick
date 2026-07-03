@@ -1,0 +1,31 @@
+meta {
+  name: Trigger Sync
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/admin/sync
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+docs {
+  Manually trigger weather data sync from MeteoSwiss.
+
+  Requires admin token authentication (Bearer token).
+
+  This will:
+  1. Fetch latest POI metadata (~5600 locations)
+  2. Download latest weather forecasts from STAC API
+  3. Update database with current data
+
+  Use this for:
+  - Testing sync functionality
+  - Forcing immediate update before scheduled cron
+  - Recovering from failed automatic syncs
+}

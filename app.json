@@ -6,8 +6,21 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "scheme": "meteoblick",
     "ios": {
-      "supportsTablet": true
+      "bundleIdentifier": "ch.meteoblick",
+      "deploymentTarget": "18.0",
+      "supportsTablet": true,
+      "entitlements": {
+        "com.apple.security.application-groups": [
+          "group.ch.meteoblick"
+        ]
+      },
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "fetch"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -16,10 +29,30 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "ch.meteoblick"
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-widgets",
+        {
+          "widgets": [
+            {
+              "name": "MeteoblickWidget",
+              "displayName": "Meteoblick",
+              "description": "Wetterprognose für gewählten Standort",
+              "supportedFamilies": [
+                "systemSmall"
+              ],
+              "contentMarginsDisabled": true
+            }
+          ]
+        }
+      ],
+      "expo-status-bar"
+    ]
   }
 }

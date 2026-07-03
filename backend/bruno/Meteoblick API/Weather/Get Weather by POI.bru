@@ -1,0 +1,26 @@
+meta {
+  name: Get Weather by POI
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/weather/:pointId
+  body: none
+  auth: none
+}
+
+params:path {
+  pointId: 1
+}
+
+docs {
+  Get current weather forecast for a specific POI (point of interest).
+
+  Example POI IDs:
+  - 1: Arosa
+  - 2: Bad Ragaz
+  - 3: Salen-Reutenen
+
+  Returns temperature, weather symbol code, precipitation, and location details.
+}

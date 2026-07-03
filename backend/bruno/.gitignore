@@ -1,0 +1,3 @@
+# Bruno secrets and local config
+*.secret.bru
+environments/Local.bru

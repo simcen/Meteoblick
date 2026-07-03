@@ -1,0 +1,24 @@
+meta {
+  name: Get All POIs
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/pois
+  body: none
+  auth: none
+}
+
+params:query {
+  ~search: Zürich
+}
+
+docs {
+  Get list of all available Points of Interest (weather stations and locations).
+
+  Optional query parameter:
+  - search: Filter by location name or postal code
+
+  Returns max 100 results.
+}
