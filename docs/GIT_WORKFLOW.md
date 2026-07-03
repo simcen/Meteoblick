@@ -186,12 +186,31 @@ Geplant:
 
 ## Best Practices
 
-1. **Kleine, fokussierte Commits** - Ein Commit = Eine logische Änderung
-2. **Commit-Message sorgfältig schreiben** - Denk an dein Zukunfts-Ich
-3. **Regelmäßig committen** - Nicht am Ende des Tages alles auf einmal
-4. **Feature-Branches** - Niemals direkt auf `main` oder `develop` committen
-5. **Rebase vor Merge** - Feature-Branch auf neuesten `develop` rebasen
-6. **Squash bei Bedarf** - Cleanup-Commits vor Merge squashen
+1. **NIEMALS vor Build & Test committen** - ❌ KEIN broken Code in Git!
+   ```bash
+   # ❌ FALSCH:
+   git add -A && git commit -m "fix: widget"
+   pnpm ios  # Dann erst testen
+   
+   # ✅ RICHTIG:
+   pnpm ios  # Erst bauen & testen
+   # Wenn alles funktioniert:
+   git add -A && git commit -m "fix: widget"
+   ```
+   
+2. **Kleine, fokussierte Commits** - Ein Commit = Eine logische Änderung
+
+3. **Commit-Message sorgfältig schreiben** - Denk an dein Zukunfts-Ich
+
+4. **Regelmäßig committen** - Nicht am Ende des Tages alles auf einmal
+   - ABER: Nur funktionierende Zustände committen!
+   - Lieber 3 funktionierende Commits als 1 broken Commit
+
+5. **Feature-Branches** - Niemals direkt auf `main` oder `develop` committen
+
+6. **Rebase vor Merge** - Feature-Branch auf neuesten `develop` rebasen
+
+7. **Squash bei Bedarf** - Cleanup-Commits vor Merge squashen
 
 ## Aktuelle Branches
 

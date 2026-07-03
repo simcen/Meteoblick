@@ -1,7 +1,17 @@
-import { createWidget } from 'expo-widgets';
-
-// Create widget instance - references the compiled native widget
-export const meteoblickWidget = createWidget('MeteoblickWidget');
+/**
+ * Widget Manager
+ *
+ * Imports the widget instance (which is already created via createWidget in the widget file)
+ * and provides helper functions for updating widget data.
+ *
+ * IMPORTANT:
+ * - We import the Widget OBJECT, not the component function!
+ * - The widget component is compiled to native SwiftUI at build time
+ * - Use ONLY updateSnapshot() - no .reload() needed (updates automatically)
+ *
+ * Source: /Users/siba5/Development/_projects/expo-example/with-widgets/App.tsx
+ */
+import meteoblickWidget from '../../widgets/MeteoblickWidget';
 
 // Widget props type
 export interface WidgetProps {
@@ -13,19 +23,17 @@ export interface WidgetProps {
 }
 
 /**
- * Updates the widget with new data and forces immediate reload
+ * Updates the widget with new data
+ * Widget updates automatically after updateSnapshot() - no .reload() needed!
  */
 export async function updateWidget(props: WidgetProps): Promise<void> {
   console.log('📱 Updating widget with data:', props);
 
   try {
-    // Update widget with new snapshot
+    // Update widget snapshot - updates automatically!
     meteoblickWidget.updateSnapshot(props);
 
-    // Force reload to apply immediately
-    meteoblickWidget.reload();
-
-    console.log('✅ Widget updated and reloaded');
+    console.log('✅ Widget snapshot updated');
   } catch (error) {
     console.error('❌ Failed to update widget:', error);
     throw error;

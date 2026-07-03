@@ -39,19 +39,17 @@
       [
         "expo-widgets",
         {
-          "ios": {
-            "widgets": [
-              {
-                "name": "MeteoblickWidget",
-                "displayName": "Meteoblick",
-                "description": "Wetterprognose für gewählten Standort",
-                "families": [
-                  "systemSmall"
-                ],
-                "targetPath": "widgets"
-              }
-            ]
-          }
+          "widgets": [
+            {
+              "name": "MeteoblickWidget",
+              "displayName": "Meteoblick",
+              "description": "Wetterprognose für gewählten Standort",
+              "supportedFamilies": [
+                "systemSmall"
+              ],
+              "contentMarginsDisabled": true
+            }
+          ]
         }
       ],
       "expo-status-bar"

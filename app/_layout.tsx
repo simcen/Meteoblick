@@ -8,6 +8,9 @@ import HomeScreen from '../src/screens/HomeScreen';
 import SmartHomeScreen from '../src/screens/SmartHomeScreen';
 import DebugScreen from '../src/screens/DebugScreen';
 
+// Import widget to ensure Metro bundles it for expo-widgets compiler
+import '../widgets/MeteoblickWidget';
+
 const Tabs = createNativeBottomTabNavigator();
 
 export default function RootLayout() {
