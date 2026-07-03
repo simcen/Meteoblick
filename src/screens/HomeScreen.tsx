@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard, Button, Alert, ActivityIndicator, FlatList, TouchableOpacity } from 'react-native';
+import { View, Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard, Alert, ActivityIndicator, FlatList, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SharedStorage } from '../storage/SharedStorage';
 import { MeteoSwissAPI } from '../api/meteoswiss';
 import { updateWidget } from '../widgets/widgetManager';
+import { Button } from '../components/Button';
+import { Colors, Typography, Spacing, Layout, ComponentStyles } from '../constants/designSystem';
 import type { WeatherData } from '../types/weather';
 import type { POI } from '../types/poi';
 
@@ -192,9 +194,12 @@ export default function HomeScreen() {
                       <TouchableOpacity
                         style={styles.suggestionItem}
                         onPress={() => handlePOISelect(item)}
+                        activeOpacity={0.7}
                       >
                         <Text style={styles.suggestionName}>{item.name}</Text>
-                        <Text style={styles.suggestionId}>POI {item.id}</Text>
+                        <Text style={styles.suggestionMeta}>
+                          {item.plz || `ID: ${item.id}`}
+                        </Text>
                       </TouchableOpacity>
                     )}
                     style={styles.suggestionsList}
@@ -204,34 +209,28 @@ export default function HomeScreen() {
               )}
 
           <View style={styles.buttonContainer}>
-            {loading ? (
-              <ActivityIndicator size="small" />
-            ) : (
-              <Button
-                title="Speichern & Wetter laden"
-                onPress={handleSave}
-                disabled={!searchQuery.trim()}
-              />
-            )}
+            <Button
+              title="Speichern & Wetter laden"
+              onPress={handleSave}
+              disabled={!searchQuery.trim()}
+              loading={loading}
+              fullWidth
+            />
           </View>
 
               {weatherData && (
-                <View style={styles.weatherContainer}>
-                  <Text style={styles.weatherTitle}>Aktuelle Wetterdaten</Text>
+                <View style={styles.weatherCard}>
+                  <Text style={styles.weatherTitle}>Aktuelles Wetter</Text>
                   <View style={styles.weatherRow}>
-                    <Text style={styles.weatherLabel}>POI:</Text>
+                    <Text style={styles.weatherLabel}>Standort</Text>
                     <Text style={styles.weatherValue}>{weatherData.location}</Text>
                   </View>
                   <View style={styles.weatherRow}>
-                    <Text style={styles.weatherLabel}>Temperatur:</Text>
+                    <Text style={styles.weatherLabel}>Temperatur</Text>
                     <Text style={styles.weatherValue}>{weatherData.temperature.toFixed(1)}°C</Text>
                   </View>
-                  <View style={styles.weatherRow}>
-                    <Text style={styles.weatherLabel}>Symbol Code:</Text>
-                    <Text style={styles.weatherValue}>{weatherData.symbolCode}</Text>
-                  </View>
-                  <View style={styles.weatherRow}>
-                    <Text style={styles.weatherLabel}>Niederschlag:</Text>
+                  <View style={[styles.weatherRow, styles.weatherRowLast]}>
+                    <Text style={styles.weatherLabel}>Niederschlag</Text>
                     <Text style={styles.weatherValue}>{weatherData.precipitation.toFixed(1)} mm</Text>
                   </View>
                   <Text style={styles.weatherTimestamp}>
@@ -248,112 +247,100 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: Colors.background.primary,
   },
   keyboardAvoid: {
     flex: 1,
   },
   container: {
     flex: 1,
-    padding: 20,
+    padding: Spacing.screenHorizontal,
   },
   label: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-    color: '#333',
+    ...Typography.headline,
+    color: Colors.label.primary,
+    marginBottom: Spacing.sm,
   },
   searchContainer: {
     position: 'relative',
+    marginBottom: Spacing.md,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    backgroundColor: '#fff',
+    ...ComponentStyles.input,
   },
   searchLoadingIndicator: {
     position: 'absolute',
-    right: 12,
-    top: 10,
+    right: Spacing.md,
+    top: 12,
   },
   suggestionsContainer: {
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    backgroundColor: '#fff',
-  },
-  debugText: {
-    fontSize: 12,
-    color: '#999',
-    marginBottom: 4,
-    paddingHorizontal: 8,
-    paddingTop: 8,
+    marginTop: Spacing.sm,
+    backgroundColor: Colors.background.primary,
+    borderRadius: Layout.radius.md,
+    borderWidth: Layout.border.normal,
+    borderColor: Colors.separator.opaque,
+    overflow: 'hidden',
   },
   suggestionsList: {
     maxHeight: 250,
   },
   suggestionItem: {
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    ...ComponentStyles.listItem,
   },
   suggestionName: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
+    ...Typography.body,
+    color: Colors.label.primary,
     marginBottom: 2,
   },
-  suggestionId: {
-    fontSize: 12,
-    color: '#999',
+  suggestionMeta: {
+    ...Typography.caption1,
+    color: Colors.label.secondary,
   },
   noResults: {
-    padding: 20,
+    padding: Spacing.lg,
     textAlign: 'center',
-    color: '#999',
-    fontSize: 14,
+    ...Typography.body,
+    color: Colors.label.tertiary,
   },
   buttonContainer: {
-    marginTop: 16,
-    minHeight: 40,
-    justifyContent: 'center',
+    marginTop: Spacing.md,
+    marginBottom: Spacing.lg,
   },
-  weatherContainer: {
-    marginTop: 24,
-    padding: 16,
-    backgroundColor: '#f8f9fa',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e9ecef',
+  weatherCard: {
+    ...ComponentStyles.card,
+    marginTop: Spacing.section,
   },
   weatherTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 12,
-    color: '#333',
+    ...Typography.title2,
+    color: Colors.label.primary,
+    marginBottom: Spacing.md,
   },
   weatherRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 6,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: Layout.border.thin,
+    borderBottomColor: Colors.separator.opaque,
+  },
+  weatherRowLast: {
+    borderBottomWidth: 0,
   },
   weatherLabel: {
-    fontSize: 14,
-    color: '#666',
+    ...Typography.subheadline,
+    color: Colors.label.secondary,
   },
   weatherValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#333',
+    ...Typography.body,
+    fontWeight: '600',
+    color: Colors.label.primary,
   },
   weatherTimestamp: {
-    marginTop: 12,
-    fontSize: 12,
-    color: '#999',
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: Layout.border.thin,
+    borderTopColor: Colors.separator.opaque,
+    ...Typography.footnote,
+    color: Colors.label.tertiary,
     textAlign: 'center',
   },
 });
