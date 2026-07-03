@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { SharedStorage } from '../storage/SharedStorage';
 import { MeteoSwissAPI } from '../api/meteoswiss';
 
-const BUILD_NUMBER = '260703-1332';
+const BUILD_NUMBER = '260703-1400';
 
 export default function DebugScreen() {
   const [lastFetchInfo, setLastFetchInfo] = useState<any>(null);

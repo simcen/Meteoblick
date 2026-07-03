@@ -42,14 +42,12 @@
           "ios": {
             "widgets": [
               {
-                "name": "WeatherWidget",
+                "name": "MeteoblickWidget",
                 "displayName": "Meteoblick",
-                "description": "Weather forecast at a glance",
+                "description": "Wetterprognose für gewählten Standort",
                 "families": [
-                  "systemSmall",
-                  "systemMedium"
-                ],
-                "targetPath": "modules/widget"
+                  "systemSmall"
+                ]
               }
             ]
           }
