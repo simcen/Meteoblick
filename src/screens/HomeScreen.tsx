@@ -223,6 +223,10 @@ export default function HomeScreen() {
                   <Text style={styles.weatherTitle}>Aktuelles Wetter</Text>
                   <View style={styles.weatherRow}>
                     <Text style={styles.weatherLabel}>Standort</Text>
+                    <Text style={styles.weatherValue}>{weatherData.locationName}</Text>
+                  </View>
+                  <View style={styles.weatherRow}>
+                    <Text style={styles.weatherLabel}>POI ID</Text>
                     <Text style={styles.weatherValue}>{weatherData.location}</Text>
                   </View>
                   <View style={styles.weatherRow}>

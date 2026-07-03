@@ -101,11 +101,18 @@ const MeteoblickWidget = (
         ]}
       >
         {/* Header */}
-        <HStack spacing={8}>
-          <Text modifiers={[font({ size: 14, weight: 'semibold' }), foregroundStyle('#FFFFFF')]}>
+        <HStack spacing={6} alignment="center">
+          <Text
+            modifiers={[
+              font({ size: 12, weight: 'semibold' }),
+              foregroundStyle('#FFFFFF')
+            ]}
+            lineLimit={1}
+          >
             {props.locationName || 'Keine Daten'}
           </Text>
-          <Text modifiers={[font({ size: 24 })]}>
+          <Spacer />
+          <Text modifiers={[font({ size: 20 })]}>
             {weatherIcon}
           </Text>
         </HStack>
