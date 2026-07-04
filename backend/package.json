@@ -27,10 +27,7 @@
     "papaparse": "^5.4.1",
     "pg": "^8.13.1",
     "undici": "^6.27.0",
-    "zod": "^4.4.3",
-    "expo": "~56.0.12",
-    "react": "19.2.3",
-    "react-native": "0.85.3"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
