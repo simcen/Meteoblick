@@ -6,9 +6,10 @@
   "type": "module",
   "scripts": {
     "dev": "NODE_OPTIONS='--dns-result-order=ipv4first' tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsc && echo 'Build successful'",
     "start": "NODE_OPTIONS='--dns-result-order=ipv4first' node dist/index.js",
-    "sync": "NODE_OPTIONS='--dns-result-order=ipv4first' tsx src/cron/sync-weather.ts"
+    "sync": "NODE_OPTIONS='--dns-result-order=ipv4first' tsx src/cron/sync-weather.ts",
+    "heroku-postbuild": "pnpm build"
   },
   "keywords": [
     "weather",
