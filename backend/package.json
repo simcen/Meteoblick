@@ -6,13 +6,15 @@
   "type": "module",
   "scripts": {
     "dev": "NODE_OPTIONS='--dns-result-order=ipv4first' tsx watch src/index.ts",
-    "build": "tsc && echo 'Build successful'",
+    "build": "prisma generate && tsc && echo 'Build successful'",
     "start": "NODE_OPTIONS='--dns-result-order=ipv4first' node dist/index.js",
     "sync": "NODE_OPTIONS='--dns-result-order=ipv4first' tsx src/cron/sync-weather.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "heroku-postbuild": "pnpm build"
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate deploy",
+    "heroku-postbuild": "prisma generate && pnpm build"
   },
   "keywords": [
     "weather",
@@ -24,12 +26,14 @@
   "dependencies": {
     "@hono/node-server": "^2.0.6",
     "@hono/zod-openapi": "^1.4.0",
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
     "@scalar/hono-api-reference": "^0.5.170",
     "dotenv": "^17.4.2",
     "hono": "^4.6.14",
     "node-cron": "^3.0.3",
     "papaparse": "^5.4.1",
-    "pg": "^8.13.1",
+    "pg": "^8.22.0",
     "undici": "^6.27.0",
     "zod": "^4.4.3"
   },
@@ -37,8 +41,9 @@
     "@types/node": "^22.10.2",
     "@types/node-cron": "^3.0.11",
     "@types/papaparse": "^5.3.15",
-    "@types/pg": "^8.11.10",
+    "@types/pg": "^8.20.0",
     "@vitest/ui": "^4.1.9",
+    "prisma": "^7.8.0",
     "tsx": "4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^4.1.9"

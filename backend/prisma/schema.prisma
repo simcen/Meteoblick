@@ -1,0 +1,34 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model pois {
+  point_id    String    @id @db.VarChar(10)
+  point_name  String    @db.VarChar(255)
+  postal_code String?   @db.VarChar(10)
+  latitude    Float
+  longitude   Float
+  height_masl Int?
+  created_at  DateTime? @default(now()) @db.Timestamp(6)
+  weather     weather?
+
+  @@index([point_name], map: "idx_pois_name")
+  @@index([postal_code], map: "idx_pois_postal_code")
+}
+
+model weather {
+  point_id             String    @id @db.VarChar(10)
+  symbol_code          Int
+  precipitation        Float
+  updated_at           DateTime? @default(now()) @db.Timestamp(6)
+  temperature_actual   Float
+  temperature_forecast Float
+  timestamp_actual     DateTime  @db.Timestamp(6)
+  timestamp_forecast   DateTime  @db.Timestamp(6)
+  pois                 pois      @relation(fields: [point_id], references: [point_id], onDelete: NoAction, onUpdate: NoAction)
+}

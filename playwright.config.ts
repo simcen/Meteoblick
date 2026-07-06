@@ -22,7 +22,7 @@ export default defineConfig({
 
   webServer: {
     command: 'cd backend && pnpm dev',
-    url: 'http://localhost:3000/health',
+    url: 'http://localhost:3000/api/debug',
     reuseExistingServer: true, // Always reuse - dev server usually already running
     timeout: 120000,
   },

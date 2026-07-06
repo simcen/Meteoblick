@@ -1,1 +1,2 @@
-web: node dist/index.js
+release: pnpm prisma migrate deploy
+web: pnpm start
