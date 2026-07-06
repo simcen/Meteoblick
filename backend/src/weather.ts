@@ -5,10 +5,12 @@ import * as db from './services/db.js';
 const WeatherResponseSchema = z.object({
   pointId: z.string().openapi({ example: '1' }),
   locationName: z.string().openapi({ example: 'Arosa' }),
-  temperature: z.number().openapi({ example: 21.5 }),
+  temperatureActual: z.number().openapi({ example: 20.5 }),
+  temperatureForecast: z.number().openapi({ example: 21.5 }),
   symbolCode: z.number().int().openapi({ example: 3 }),
   precipitation: z.number().openapi({ example: 0.2 }),
-  timestamp: z.string().datetime().openapi({ example: '2026-06-30T12:00:00Z' }),
+  timestampActual: z.string().datetime().openapi({ example: '2026-06-30T11:00:00Z' }),
+  timestampForecast: z.string().datetime().openapi({ example: '2026-06-30T12:00:00Z' }),
   latitude: z.number().openapi({ example: 46.792661 }),
   longitude: z.number().openapi({ example: 9.679014 }),
 });
@@ -66,10 +68,12 @@ weatherRouter.openapi(getWeatherRoute, async (c) => {
   return c.json({
     pointId: data.point_id,
     locationName: data.point_name,
-    temperature: data.temperature,
+    temperatureActual: data.temperature_actual,
+    temperatureForecast: data.temperature_forecast,
     symbolCode: data.symbol_code,
     precipitation: data.precipitation,
-    timestamp: data.timestamp,
+    timestampActual: data.timestamp_actual,
+    timestampForecast: data.timestamp_forecast,
     latitude: data.latitude,
     longitude: data.longitude,
   }, 200);

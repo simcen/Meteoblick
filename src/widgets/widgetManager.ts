@@ -18,12 +18,14 @@ import { APP_GROUP_ID, WIDGET_LAST_REFRESH_KEY } from '../constants';
 // Widget props type
 export interface WidgetProps {
   locationName: string;
-  temperature: number;
+  temperatureActual: number;      // IST Temperatur (letzte vergangene Stunde)
+  temperatureForecast: number;    // Prognose Temperatur (nächste zukünftige Stunde)
   symbolCode: number;
   precipitation: number;
   buildNumber: string;
-  timestamp?: string; // ISO timestamp of weather data (from backend)
-  refreshedAt?: string; // ISO timestamp when widget was updated
+  timestampActual?: string;       // ISO timestamp für IST
+  timestampForecast?: string;     // ISO timestamp für Prognose
+  refreshedAt?: string;           // ISO timestamp when widget was updated
 }
 
 /**

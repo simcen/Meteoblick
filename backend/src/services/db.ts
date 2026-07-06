@@ -26,12 +26,65 @@ export async function initDatabase() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS weather (
         point_id VARCHAR(10) PRIMARY KEY REFERENCES pois(point_id),
-        temperature DOUBLE PRECISION NOT NULL,
+        temperature_actual DOUBLE PRECISION NOT NULL,
+        temperature_forecast DOUBLE PRECISION NOT NULL,
         symbol_code INTEGER NOT NULL,
         precipitation DOUBLE PRECISION NOT NULL,
-        timestamp TIMESTAMP NOT NULL,
+        timestamp_actual TIMESTAMP NOT NULL,
+        timestamp_forecast TIMESTAMP NOT NULL,
         updated_at TIMESTAMP DEFAULT NOW()
       );
+    `);
+
+    // Migration: Add new columns if they don't exist (for existing deployments)
+    await client.query(`
+      DO $$
+      BEGIN
+        -- Add temperature_actual if it doesn't exist
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                      WHERE table_name='weather' AND column_name='temperature_actual') THEN
+          ALTER TABLE weather ADD COLUMN temperature_actual DOUBLE PRECISION;
+        END IF;
+
+        -- Add temperature_forecast if it doesn't exist
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                      WHERE table_name='weather' AND column_name='temperature_forecast') THEN
+          ALTER TABLE weather ADD COLUMN temperature_forecast DOUBLE PRECISION;
+        END IF;
+
+        -- Add timestamp_actual if it doesn't exist
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                      WHERE table_name='weather' AND column_name='timestamp_actual') THEN
+          ALTER TABLE weather ADD COLUMN timestamp_actual TIMESTAMP;
+        END IF;
+
+        -- Add timestamp_forecast if it doesn't exist
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                      WHERE table_name='weather' AND column_name='timestamp_forecast') THEN
+          ALTER TABLE weather ADD COLUMN timestamp_forecast TIMESTAMP;
+        END IF;
+
+        -- Migrate old data if temperature column exists
+        IF EXISTS (SELECT 1 FROM information_schema.columns
+                  WHERE table_name='weather' AND column_name='temperature') THEN
+          UPDATE weather
+          SET temperature_forecast = temperature,
+              timestamp_forecast = timestamp,
+              temperature_actual = temperature,
+              timestamp_actual = timestamp
+          WHERE temperature_actual IS NULL;
+
+          -- Drop old columns
+          ALTER TABLE weather DROP COLUMN IF EXISTS temperature;
+          ALTER TABLE weather DROP COLUMN IF EXISTS timestamp;
+        END IF;
+
+        -- Make new columns NOT NULL if they aren't yet
+        ALTER TABLE weather ALTER COLUMN temperature_actual SET NOT NULL;
+        ALTER TABLE weather ALTER COLUMN temperature_forecast SET NOT NULL;
+        ALTER TABLE weather ALTER COLUMN timestamp_actual SET NOT NULL;
+        ALTER TABLE weather ALTER COLUMN timestamp_forecast SET NOT NULL;
+      END $$;
     `);
 
     await client.query(`
@@ -64,15 +117,25 @@ export async function upsertPOI(poi: POI): Promise<void> {
 
 export async function upsertWeather(weather: WeatherData): Promise<void> {
   await pool.query(
-    `INSERT INTO weather (point_id, temperature, symbol_code, precipitation, timestamp, updated_at)
-     VALUES ($1, $2, $3, $4, $5, NOW())
+    `INSERT INTO weather (point_id, temperature_actual, temperature_forecast, symbol_code, precipitation, timestamp_actual, timestamp_forecast, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
      ON CONFLICT (point_id) DO UPDATE SET
-       temperature = EXCLUDED.temperature,
+       temperature_actual = EXCLUDED.temperature_actual,
+       temperature_forecast = EXCLUDED.temperature_forecast,
        symbol_code = EXCLUDED.symbol_code,
        precipitation = EXCLUDED.precipitation,
-       timestamp = EXCLUDED.timestamp,
+       timestamp_actual = EXCLUDED.timestamp_actual,
+       timestamp_forecast = EXCLUDED.timestamp_forecast,
        updated_at = NOW()`,
-    [weather.point_id, weather.temperature, weather.symbol_code, weather.precipitation, weather.timestamp]
+    [
+      weather.point_id,
+      weather.temperature_actual,
+      weather.temperature_forecast,
+      weather.symbol_code,
+      weather.precipitation,
+      weather.timestamp_actual,
+      weather.timestamp_forecast
+    ]
   );
 }
 
@@ -113,10 +176,12 @@ export async function getWeatherWithPOI(pointId: string) {
   const result = await pool.query(
     `SELECT
        w.point_id,
-       w.temperature,
+       w.temperature_actual,
+       w.temperature_forecast,
        w.symbol_code,
        w.precipitation,
-       w.timestamp,
+       w.timestamp_actual,
+       w.timestamp_forecast,
        w.updated_at,
        p.point_name,
        p.postal_code,

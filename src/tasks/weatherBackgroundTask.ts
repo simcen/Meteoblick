@@ -23,14 +23,16 @@ TaskManager.defineTask(WEATHER_BACKGROUND_TASK, async () => {
     // Update widget with new data
     await updateWidget({
       locationName: weather.locationName,
-      temperature: weather.temperature,
+      temperatureActual: weather.temperatureActual,
+      temperatureForecast: weather.temperatureForecast,
       symbolCode: weather.symbolCode,
       precipitation: weather.precipitation,
       buildNumber: BUILD_NUMBER,
-      timestamp: weather.timestamp,
+      timestampActual: weather.timestampActual,
+      timestampForecast: weather.timestampForecast,
     });
 
-    console.log('[Background] Weather data + widget updated:', weather.temperature);
+    console.log('[Background] Weather data + widget updated:', weather.temperatureActual);
 
     return BackgroundFetch.BackgroundFetchResult.NewData;
   } catch (error) {

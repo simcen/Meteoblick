@@ -139,7 +139,9 @@ export async function fetchWeatherFromMeteoSwiss(): Promise<WeatherData[]> {
       const now = new Date();
       const currentHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours());
 
-      const weatherByPOI = new Map<string, WeatherData>();
+      // Separate maps for actual (past) and forecast (future)
+      const actualByPOI = new Map<string, { temp: number; date: Date; timeDiff: number }>();
+      const forecastByPOI = new Map<string, { temp: number; date: Date; timeDiff: number }>();
 
       for (const row of parsed.data) {
         const pointId = row[0];
@@ -154,19 +156,45 @@ export async function fetchWeatherFromMeteoSwiss(): Promise<WeatherData[]> {
         const hour = parseInt(dateStr.substring(8, 10), 10);
         const rowDate = new Date(year, month, day, hour);
 
-        const timeDiff = rowDate.getTime() - currentHour.getTime();
-        if (timeDiff < 0) continue;
-
         const temperature = parseFloat(tempStr);
         if (isNaN(temperature)) continue;
 
-        if (!weatherByPOI.has(pointId) || timeDiff < (weatherByPOI.get(pointId)!.timestamp as any)) {
+        const timeDiff = rowDate.getTime() - currentHour.getTime();
+
+        // Collect ACTUAL (past) - closest to now, but in the past
+        if (timeDiff <= 0) {
+          const existing = actualByPOI.get(pointId);
+          if (!existing || timeDiff > existing.timeDiff) {
+            // timeDiff is negative, so > means closer to 0 (more recent)
+            actualByPOI.set(pointId, { temp: temperature, date: rowDate, timeDiff });
+          }
+        }
+
+        // Collect FORECAST (future) - closest to now, but in the future
+        if (timeDiff > 0) {
+          const existing = forecastByPOI.get(pointId);
+          if (!existing || timeDiff < existing.timeDiff) {
+            // timeDiff is positive, so < means closer to 0 (nearest future)
+            forecastByPOI.set(pointId, { temp: temperature, date: rowDate, timeDiff });
+          }
+        }
+      }
+
+      // Combine into WeatherData - only include POIs that have BOTH actual and forecast
+      const weatherByPOI = new Map<string, WeatherData>();
+
+      for (const [pointId, actual] of actualByPOI.entries()) {
+        const forecast = forecastByPOI.get(pointId);
+
+        if (forecast) {
           weatherByPOI.set(pointId, {
             point_id: pointId,
-            temperature,
+            temperature_actual: actual.temp,
+            temperature_forecast: forecast.temp,
             symbol_code: 3,
             precipitation: 0,
-            timestamp: rowDate.toISOString(),
+            timestamp_actual: actual.date.toISOString(),
+            timestamp_forecast: forecast.date.toISOString(),
             updated_at: new Date().toISOString(),
           });
         }

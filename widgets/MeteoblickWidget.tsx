@@ -11,12 +11,14 @@ import { createWidget, type WidgetEnvironment } from 'expo-widgets';
 
 interface WeatherProps {
   locationName: string;
-  temperature: number;
+  temperatureActual: number;       // IST Temperatur (letzte vergangene Stunde)
+  temperatureForecast: number;     // Prognose Temperatur (nächste zukünftige Stunde)
   symbolCode: number;
   precipitation: number;
   buildNumber: string;
-  timestamp?: string; // ISO timestamp of weather data (from backend)
-  refreshedAt?: string; // ISO timestamp when widget was updated
+  timestampActual?: string;        // ISO timestamp für IST
+  timestampForecast?: string;      // ISO timestamp für Prognose
+  refreshedAt?: string;            // ISO timestamp when widget was updated
 }
 
 /**
@@ -148,10 +150,10 @@ const MeteoblickWidget = (
 
         <Spacer />
 
-        {/* Temperature */}
+        {/* Temperature (IST) */}
         <HStack spacing={2}>
           <Text modifiers={[font({ size: tempFontSize, weight: 'bold' }), foregroundStyle('#FFFFFF')]}>
-            {props.temperature?.toFixed(1) || '--'}
+            {props.temperatureActual?.toFixed(1) || '--'}
           </Text>
           <Text modifiers={[font({ size: unitFontSize, weight: 'medium' }), foregroundStyle('#FFFFFF')]}>
             °C
@@ -173,9 +175,9 @@ const MeteoblickWidget = (
         {/* Timestamp and Build number - hide on very small widgets */}
         {!isSmall && (
           <HStack spacing={8}>
-            {props.timestamp && (
+            {props.timestampActual && (
               <Text modifiers={[font({ size: buildFontSize }), foregroundStyle('#FFFFFF80')]}>
-                📊 {formatTimestamp(props.timestamp)}
+                📊 {formatTimestamp(props.timestampActual)}
               </Text>
             )}
             {props.refreshedAt && (

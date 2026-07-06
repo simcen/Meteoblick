@@ -6,10 +6,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 interface BackendWeatherResponse {
   pointId: string;
   locationName: string;
-  temperature: number;
+  temperatureActual: number;
+  temperatureForecast: number;
   symbolCode: number;
   precipitation: number;
-  timestamp: string;
+  timestampActual: string;
+  timestampForecast: string;
   latitude: number;
   longitude: number;
 }
@@ -52,10 +54,12 @@ export class MeteoSwissAPI {
       }));
 
       return {
-        temperature: data.temperature,
+        temperatureActual: data.temperatureActual,
+        temperatureForecast: data.temperatureForecast,
         symbolCode: data.symbolCode,
         precipitation: data.precipitation,
-        timestamp: data.timestamp,
+        timestampActual: data.timestampActual,
+        timestampForecast: data.timestampForecast,
         location: data.pointId,
         locationName: data.locationName,
       };

@@ -47,7 +47,8 @@ export const SharedStorage = {
         appGroup: APP_GROUP_ID,
         location: data.location,
         locationName: data.locationName,
-        temperature: data.temperature
+        temperatureActual: data.temperatureActual,
+        temperatureForecast: data.temperatureForecast
       });
       await SharedGroupPreferences.setItem(WEATHER_DATA_KEY, json, APP_GROUP_ID);
       console.log('✅ Saved to SharedStorage successfully');

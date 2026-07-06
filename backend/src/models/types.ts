@@ -9,20 +9,24 @@ export interface POI {
 
 export interface WeatherData {
   point_id: string;
-  temperature: number;
+  temperature_actual: number;      // IST (letzte vergangene Stunde)
+  temperature_forecast: number;    // Prognose (nächste zukünftige Stunde)
   symbol_code: number;
   precipitation: number;
-  timestamp: string;
+  timestamp_actual: string;        // Timestamp für IST
+  timestamp_forecast: string;      // Timestamp für Prognose
   updated_at: string;
 }
 
 export interface WeatherResponse {
   pointId: string;
   locationName: string;
-  temperature: number;
+  temperatureActual: number;       // IST (letzte vergangene Stunde)
+  temperatureForecast: number;     // Prognose (nächste zukünftige Stunde)
   symbolCode: number;
   precipitation: number;
-  timestamp: string;
+  timestampActual: string;         // Timestamp für IST
+  timestampForecast: string;       // Timestamp für Prognose
   latitude: number;
   longitude: number;
 }

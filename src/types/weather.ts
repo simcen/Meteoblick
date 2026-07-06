@@ -1,8 +1,10 @@
 export interface WeatherData {
-  temperature: number;
+  temperatureActual: number;       // IST (letzte vergangene Stunde)
+  temperatureForecast: number;     // Prognose (nächste zukünftige Stunde)
   symbolCode: number;
   precipitation: number;
-  timestamp: string;
+  timestampActual: string;         // Timestamp für IST
+  timestampForecast: string;       // Timestamp für Prognose
   location: string;
   locationName: string;
 }

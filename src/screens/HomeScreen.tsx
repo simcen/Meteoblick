@@ -63,11 +63,13 @@ export default function HomeScreen() {
       // Update widget with fresh data
       await updateWidget({
         locationName: weather.locationName,
-        temperature: weather.temperature,
+        temperatureActual: weather.temperatureActual,
+        temperatureForecast: weather.temperatureForecast,
         symbolCode: weather.symbolCode,
         precipitation: weather.precipitation,
         buildNumber: BUILD_NUMBER,
-        timestamp: weather.timestamp,
+        timestampActual: weather.timestampActual,
+        timestampForecast: weather.timestampForecast,
       });
 
       return weather;
@@ -130,11 +132,13 @@ export default function HomeScreen() {
       if (weather) {
         await updateWidget({
           locationName: weather.locationName,
-          temperature: weather.temperature,
+          temperatureActual: weather.temperatureActual,
+          temperatureForecast: weather.temperatureForecast,
           symbolCode: weather.symbolCode,
           precipitation: weather.precipitation,
           buildNumber: BUILD_NUMBER,
-          timestamp: weather.timestamp,
+          timestampActual: weather.timestampActual,
+          timestampForecast: weather.timestampForecast,
         });
       }
 
@@ -230,15 +234,20 @@ export default function HomeScreen() {
                     <Text style={styles.weatherValue}>{weatherData.location}</Text>
                   </View>
                   <View style={styles.weatherRow}>
-                    <Text style={styles.weatherLabel}>Temperatur</Text>
-                    <Text style={styles.weatherValue}>{weatherData.temperature.toFixed(1)}°C</Text>
+                    <Text style={styles.weatherLabel}>Temperatur IST</Text>
+                    <Text style={styles.weatherValue}>{weatherData.temperatureActual.toFixed(1)}°C</Text>
+                  </View>
+                  <View style={styles.weatherRow}>
+                    <Text style={styles.weatherLabel}>Temperatur Prognose</Text>
+                    <Text style={styles.weatherValue}>{weatherData.temperatureForecast.toFixed(1)}°C</Text>
                   </View>
                   <View style={[styles.weatherRow, styles.weatherRowLast]}>
                     <Text style={styles.weatherLabel}>Niederschlag</Text>
                     <Text style={styles.weatherValue}>{weatherData.precipitation.toFixed(1)} mm</Text>
                   </View>
                   <Text style={styles.weatherTimestamp}>
-                    Aktualisiert: {new Date(weatherData.timestamp).toLocaleString('de-CH')}
+                    IST: {new Date(weatherData.timestampActual).toLocaleString('de-CH')}{'\n'}
+                    Prognose: {new Date(weatherData.timestampForecast).toLocaleString('de-CH')}
                   </Text>
                 </View>
               )}

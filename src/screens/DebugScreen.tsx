@@ -109,14 +109,16 @@ export default function DebugScreen() {
 
       await updateWidget({
         locationName: weather.locationName,
-        temperature: weather.temperature,
+        temperatureActual: weather.temperatureActual,
+        temperatureForecast: weather.temperatureForecast,
         symbolCode: weather.symbolCode,
         precipitation: weather.precipitation,
         buildNumber: BUILD_NUMBER,
-        timestamp: weather.timestamp,
+        timestampActual: weather.timestampActual,
+        timestampForecast: weather.timestampForecast,
       });
 
-      Alert.alert('Erfolg', `Widget aktualisiert!\n\nTemp: ${weather.temperature}°C\nOrt: ${weather.locationName}`);
+      Alert.alert('Erfolg', `Widget aktualisiert!\n\nTemp IST: ${weather.temperatureActual}°C\nTemp Prognose: ${weather.temperatureForecast}°C\nOrt: ${weather.locationName}`);
       await loadDebugInfo();
     } catch (error: any) {
       Alert.alert('Fehler', error.message);
