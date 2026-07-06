@@ -1,2 +1,2 @@
-release: pnpm prisma migrate deploy
-web: pnpm start
+release: cd backend && ./node_modules/.bin/prisma migrate deploy
+web: cd backend && pnpm start
