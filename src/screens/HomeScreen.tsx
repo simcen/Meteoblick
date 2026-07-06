@@ -69,55 +69,68 @@ export default function HomeScreen() {
   };
 
   const fetchWeatherData = async (poiId: string): Promise<WeatherData | null> => {
+    // 1. MeteoSwiss — independent of Loxone so backend downtime doesn't block Loxone updates.
+    let weather = await SharedStorage.getWeatherData(); // cache as fallback
     try {
-      const weather = await MeteoSwissAPI.fetchWeatherData(poiId);
-      await SharedStorage.setWeatherData(weather);
-      setWeatherData(weather);
+      const fresh = await MeteoSwissAPI.fetchWeatherData(poiId);
+      await SharedStorage.setWeatherData(fresh);
+      weather = fresh;
+      setWeatherData(fresh);
+      console.log('[HomeScreen] MeteoSwiss fetched:', fresh.temperatureActual);
+    } catch (error) {
+      console.warn('[HomeScreen] MeteoSwiss fetch failed (continuing):', error);
+    }
 
-      // Also fetch Loxone temperature if configured
-      let newLoxoneTemp: number | null = null;
-      let newLoxoneTimestamp: string | null = null;
-      const loxoneConfig = await SharedStorage.getLoxoneConfig();
-      if (loxoneConfig?.enabled && loxoneConfig.temperatureSensorUUID) {
-        try {
-          const api = new LoxoneAPI(loxoneConfig);
-          const temp = await api.getTemperature(loxoneConfig.temperatureSensorUUID);
-          newLoxoneTemp = temp;
-          newLoxoneTimestamp = new Date().toISOString();
-          await SharedStorage.setLoxoneSensorData({ temperature: temp, timestamp: newLoxoneTimestamp });
-        } catch (err) {
-          console.warn('Loxone fetch failed:', err);
-          const cached = await SharedStorage.getLoxoneSensorData();
-          if (cached) {
-            newLoxoneTemp = cached.temperature;
-            newLoxoneTimestamp = cached.timestamp;
-          }
+    // 2. Loxone (if configured) — independent of MeteoSwiss.
+    let newLoxoneTemp: number | null = null;
+    let newLoxoneTimestamp: string | null = null;
+
+    const loxoneConfig = await SharedStorage.getLoxoneConfig();
+    if (loxoneConfig?.enabled && loxoneConfig.temperatureSensorUUID) {
+      try {
+        const api = new LoxoneAPI(loxoneConfig);
+        const temp = await api.getTemperature(loxoneConfig.temperatureSensorUUID);
+        newLoxoneTemp = temp;
+        newLoxoneTimestamp = new Date().toISOString();
+        await SharedStorage.setLoxoneSensorData({ temperature: temp, timestamp: newLoxoneTimestamp });
+        console.log('[HomeScreen] Loxone temperature:', temp);
+      } catch (err) {
+        console.warn('[HomeScreen] Loxone fetch failed:', err);
+        const cached = await SharedStorage.getLoxoneSensorData();
+        if (cached) {
+          newLoxoneTemp = cached.temperature;
+          newLoxoneTimestamp = cached.timestamp;
         }
       }
-
-      // Update local state
-      setLoxoneTemp(newLoxoneTemp);
-      setLoxoneTimestamp(newLoxoneTimestamp);
-
-      // Update widget with fresh data
-      await updateWidget({
-        locationName: weather.locationName,
-        temperatureActual: weather.temperatureActual,
-        temperatureForecast: weather.temperatureForecast,
-        temperatureLoxone: newLoxoneTemp ?? undefined,
-        symbolCode: weather.symbolCode,
-        precipitation: weather.precipitation,
-        buildNumber: BUILD_NUMBER,
-        timestampActual: weather.timestampActual,
-        timestampForecast: weather.timestampForecast,
-        timestampLoxone: newLoxoneTimestamp ?? undefined,
-      });
-
-      return weather;
-    } catch (error) {
-      console.error('Failed to fetch weather data:', error);
-      return null;
     }
+
+    // Update local Loxone state
+    setLoxoneTemp(newLoxoneTemp);
+    setLoxoneTimestamp(newLoxoneTimestamp);
+
+    // 3. Update widget — only if we have any weather data (fresh or cached).
+    if (weather) {
+      try {
+        await updateWidget({
+          locationName: weather.locationName,
+          temperatureActual: weather.temperatureActual,
+          temperatureForecast: weather.temperatureForecast,
+          temperatureLoxone: newLoxoneTemp ?? undefined,
+          symbolCode: weather.symbolCode,
+          precipitation: weather.precipitation,
+          buildNumber: BUILD_NUMBER,
+          timestampActual: weather.timestampActual,
+          timestampForecast: weather.timestampForecast,
+          timestampLoxone: newLoxoneTimestamp ?? undefined,
+        });
+      } catch (widgetError) {
+        console.error('[HomeScreen] Widget update failed:', widgetError);
+      }
+    } else {
+      console.log('[HomeScreen] No weather data available (no fresh, no cache) — skipping widget update');
+    }
+
+    return weather;
   };
 
   const searchPOIs = async () => {

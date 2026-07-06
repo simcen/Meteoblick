@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, RefreshCon
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SharedStorage } from '../storage/SharedStorage';
 import { MeteoSwissAPI } from '../api/meteoswiss';
+import { LoxoneAPI } from '../api/loxone';
 import { updateWidget } from '../widgets/widgetManager';
 import { Button } from '../components/Button';
 import { BUILD_NUMBER, API_BASE_URL } from '../constants';
@@ -56,7 +57,7 @@ export default function DebugScreen() {
       2: 'Denied',
       3: 'Restricted',
     };
-    setBgFetchStatus(statusMap[status] || 'Unknown');
+    setBgFetchStatus(status !== null ? statusMap[status] || 'Unknown' : 'Unknown');
 
     // Load backend debug info
     try {
@@ -92,9 +93,9 @@ export default function DebugScreen() {
     // Next fresh data = earliest of next app fetch or next bg fetch
     const now = Date.now();
     const bgTime = timestamp ? Math.max(new Date(timestamp).getTime() + 15 * 60 * 1000, now) : null;
-    const times = [nextAppFetch, bgTime]
-      .filter(Boolean)
-      .map(t => typeof t === 'string' ? new Date(t).getTime() : t);
+    const times: number[] = [];
+    if (nextAppFetch) times.push(new Date(nextAppFetch).getTime());
+    if (bgTime !== null) times.push(bgTime);
 
     if (times.length > 0) {
       const earliest = Math.min(...times);
@@ -104,36 +105,98 @@ export default function DebugScreen() {
 
   const testBackgroundFetch = async () => {
     setTesting(true);
-    try {
-      console.log('[Debug] Testing background fetch manually...');
+    console.log('[Debug] Testing background fetch manually...');
 
-      const pointId = await SharedStorage.getPointId();
-      if (!pointId) {
-        Alert.alert('Fehler', 'Kein POI konfiguriert');
+    const pointId = await SharedStorage.getPointId();
+    if (!pointId) {
+      Alert.alert('Fehler', 'Kein POI konfiguriert');
+      setTesting(false);
+      return;
+    }
+
+    // 1. MeteoSwiss — independent of Loxone, with cache fallback.
+    let weather = await SharedStorage.getWeatherData();
+    let meteoFresh = false;
+    try {
+      const fresh = await MeteoSwissAPI.fetchWeatherData(pointId);
+      await SharedStorage.setWeatherData(fresh);
+      weather = fresh;
+      meteoFresh = true;
+    } catch (error: any) {
+      console.warn('[Debug] MeteoSwiss fetch failed:', error);
+    }
+
+    // 2. Loxone — independent of MeteoSwiss, with cache fallback.
+    let loxoneTemp: number | undefined;
+    let loxoneTimestamp: string | undefined;
+    let loxoneFresh = false;
+
+    const loxoneConfig = await SharedStorage.getLoxoneConfig();
+    if (loxoneConfig?.enabled && loxoneConfig.temperatureSensorUUID) {
+      try {
+        const api = new LoxoneAPI(loxoneConfig);
+        const temp = await api.getTemperature(loxoneConfig.temperatureSensorUUID);
+        loxoneTemp = temp;
+        loxoneTimestamp = new Date().toISOString();
+        await SharedStorage.setLoxoneSensorData({
+          temperature: temp,
+          timestamp: loxoneTimestamp,
+        });
+        loxoneFresh = true;
+      } catch (error: any) {
+        console.warn('[Debug] Loxone fetch failed:', error);
+        const cached = await SharedStorage.getLoxoneSensorData();
+        if (cached) {
+          loxoneTemp = cached.temperature;
+          loxoneTimestamp = cached.timestamp;
+        }
+      }
+    }
+
+    // 3. Update widget — only if we have any weather data.
+    if (weather) {
+      try {
+        await updateWidget({
+          locationName: weather.locationName,
+          temperatureActual: weather.temperatureActual,
+          temperatureForecast: weather.temperatureForecast,
+          temperatureLoxone: loxoneTemp,
+          symbolCode: weather.symbolCode,
+          precipitation: weather.precipitation,
+          buildNumber: BUILD_NUMBER,
+          timestampActual: weather.timestampActual,
+          timestampForecast: weather.timestampForecast,
+          timestampLoxone: loxoneTimestamp,
+        });
+      } catch (error: any) {
+        Alert.alert('Fehler', `Widget-Update fehlgeschlagen: ${error.message}`);
+        setTesting(false);
         return;
       }
-
-      const weather = await MeteoSwissAPI.fetchWeatherData(pointId);
-      await SharedStorage.setWeatherData(weather);
-
-      await updateWidget({
-        locationName: weather.locationName,
-        temperatureActual: weather.temperatureActual,
-        temperatureForecast: weather.temperatureForecast,
-        symbolCode: weather.symbolCode,
-        precipitation: weather.precipitation,
-        buildNumber: BUILD_NUMBER,
-        timestampActual: weather.timestampActual,
-        timestampForecast: weather.timestampForecast,
-      });
-
-      Alert.alert('Erfolg', `Widget aktualisiert!\n\nTemp IST: ${weather.temperatureActual}°C\nTemp Prognose: ${weather.temperatureForecast}°C\nOrt: ${weather.locationName}`);
-      await loadDebugInfo();
-    } catch (error: any) {
-      Alert.alert('Fehler', error.message);
-    } finally {
+    } else {
+      Alert.alert('Fehler', 'Keine Wetterdaten verfügbar (weder frisch noch Cache).');
       setTesting(false);
+      return;
     }
+
+    // Compose result message
+    const meteoStatus = meteoFresh ? 'frisch' : 'aus Cache';
+    const loxoneStatus = loxoneFresh
+      ? `frisch (${loxoneTemp?.toFixed(1)}°C)`
+      : loxoneTemp !== undefined
+        ? `aus Cache (${loxoneTemp.toFixed(1)}°C)`
+        : 'deaktiviert';
+
+    Alert.alert(
+      'Widget aktualisiert',
+      `MeteoSwiss: ${meteoStatus}\n` +
+        `Temp IST: ${weather.temperatureActual}°C\n` +
+        `Temp Prognose: ${weather.temperatureForecast}°C\n` +
+        `Ort: ${weather.locationName}\n\n` +
+        `Loxone: ${loxoneStatus}`,
+    );
+    await loadDebugInfo();
+    setTesting(false);
   };
 
   const onRefresh = async () => {

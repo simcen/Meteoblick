@@ -26,57 +26,67 @@ export function AppProvider({ children }: AppProviderProps) {
       const pointId = await SharedStorage.getPointId();
       if (!pointId) return;
 
+      console.log('[App] Auto-refreshing weather + Loxone data...');
+
+      // 1. MeteoSwiss — independent of Loxone so backend downtime doesn't block Loxone updates.
+      let weather = await SharedStorage.getWeatherData(); // cache as fallback
       try {
-        console.log('[App] Auto-refreshing weather + Loxone data...');
+        const fresh = await MeteoSwissAPI.fetchWeatherData(pointId);
+        await SharedStorage.setWeatherData(fresh);
+        weather = fresh;
+        console.log('[App] MeteoSwiss fetched:', fresh.temperatureActual);
+      } catch (error) {
+        console.warn('[App] MeteoSwiss fetch failed (continuing):', error);
+      }
 
-        // 1. MeteoSwiss
-        const weather = await MeteoSwissAPI.fetchWeatherData(pointId);
-        await SharedStorage.setWeatherData(weather);
+      // 2. Loxone (if configured) — independent of MeteoSwiss.
+      let loxoneTemp: number | undefined;
+      let loxoneTimestamp: string | undefined;
 
-        // 2. Loxone (if configured)
-        let loxoneTemp: number | undefined;
-        let loxoneTimestamp: string | undefined;
-
-        const loxoneConfig = await SharedStorage.getLoxoneConfig();
-        if (loxoneConfig?.enabled && loxoneConfig.temperatureSensorUUID) {
-          try {
-            const api = new LoxoneAPI(loxoneConfig);
-            const temp = await api.getTemperature(loxoneConfig.temperatureSensorUUID);
-            loxoneTemp = temp;
-            loxoneTimestamp = new Date().toISOString();
-
-            await SharedStorage.setLoxoneSensorData({
-              temperature: temp,
-              timestamp: loxoneTimestamp,
-            });
-            console.log('[App] Loxone temperature:', temp);
-          } catch (loxoneError) {
-            console.warn('[App] Loxone fetch failed (continuing):', loxoneError);
-            // Fallback: Try to read last cached value
-            const cached = await SharedStorage.getLoxoneSensorData();
-            if (cached) {
-              loxoneTemp = cached.temperature;
-              loxoneTimestamp = cached.timestamp;
-              console.log('[App] Using cached Loxone data:', loxoneTemp);
-            }
+      const loxoneConfig = await SharedStorage.getLoxoneConfig();
+      if (loxoneConfig?.enabled && loxoneConfig.temperatureSensorUUID) {
+        try {
+          const api = new LoxoneAPI(loxoneConfig);
+          const temp = await api.getTemperature(loxoneConfig.temperatureSensorUUID);
+          loxoneTemp = temp;
+          loxoneTimestamp = new Date().toISOString();
+          await SharedStorage.setLoxoneSensorData({
+            temperature: temp,
+            timestamp: loxoneTimestamp,
+          });
+          console.log('[App] Loxone temperature:', temp);
+        } catch (loxoneError) {
+          console.warn('[App] Loxone fetch failed (continuing):', loxoneError);
+          // Fallback: Try to read last cached value
+          const cached = await SharedStorage.getLoxoneSensorData();
+          if (cached) {
+            loxoneTemp = cached.temperature;
+            loxoneTimestamp = cached.timestamp;
+            console.log('[App] Using cached Loxone data:', loxoneTemp);
           }
         }
+      }
 
-        // 3. Update widget
-        await updateWidget({
-          locationName: weather.locationName,
-          temperatureActual: weather.temperatureActual,
-          temperatureForecast: weather.temperatureForecast,
-          temperatureLoxone: loxoneTemp,
-          symbolCode: weather.symbolCode,
-          precipitation: weather.precipitation,
-          buildNumber: BUILD_NUMBER,
-          timestampActual: weather.timestampActual,
-          timestampForecast: weather.timestampForecast,
-          timestampLoxone: loxoneTimestamp,
-        });
-      } catch (error) {
-        console.error('[App] Failed to auto-refresh data:', error);
+      // 3. Update widget — only if we have any weather data (fresh or cached).
+      if (weather) {
+        try {
+          await updateWidget({
+            locationName: weather.locationName,
+            temperatureActual: weather.temperatureActual,
+            temperatureForecast: weather.temperatureForecast,
+            temperatureLoxone: loxoneTemp,
+            symbolCode: weather.symbolCode,
+            precipitation: weather.precipitation,
+            buildNumber: BUILD_NUMBER,
+            timestampActual: weather.timestampActual,
+            timestampForecast: weather.timestampForecast,
+            timestampLoxone: loxoneTimestamp,
+          });
+        } catch (widgetError) {
+          console.error('[App] Widget update failed:', widgetError);
+        }
+      } else {
+        console.log('[App] No weather data available (no fresh, no cache) — skipping widget update');
       }
     };
 
