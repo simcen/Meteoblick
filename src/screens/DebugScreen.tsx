@@ -5,7 +5,7 @@ import { SharedStorage } from '../storage/SharedStorage';
 import { MeteoSwissAPI } from '../api/meteoswiss';
 import { updateWidget } from '../widgets/widgetManager';
 import { Button } from '../components/Button';
-import { BUILD_NUMBER } from '../constants';
+import { BUILD_NUMBER, API_BASE_URL } from '../constants';
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as TaskManager from 'expo-task-manager';
 
@@ -48,7 +48,7 @@ export default function DebugScreen() {
 
     // Load backend debug info
     try {
-      const response = await fetch('http://localhost:3000/api/debug');
+      const response = await fetch(`${API_BASE_URL}/api/debug`);
       const data = await response.json();
       setBackendDebugInfo(data);
     } catch (error) {
