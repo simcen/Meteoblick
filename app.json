@@ -7,6 +7,9 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "scheme": "meteoblick",
+    "extra": {
+      "apiBaseUrl": "http://172.16.100.10:3000"
+    },
     "ios": {
       "bundleIdentifier": "ch.meteoblick",
       "deploymentTarget": "18.0",
