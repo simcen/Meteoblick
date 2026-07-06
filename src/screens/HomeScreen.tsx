@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard, Alert, ActivityIndicator, FlatList, TouchableOpacity } from 'react-native';
+import { useState, useEffect, useCallback } from 'react';
+import { View, Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard, Alert, ActivityIndicator, FlatList, TouchableOpacity, RefreshControl, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { SharedStorage } from '../storage/SharedStorage';
 import { MeteoSwissAPI } from '../api/meteoswiss';
 import { LoxoneAPI } from '../api/loxone';
@@ -15,6 +16,7 @@ export default function HomeScreen() {
   const [pointId, setPointId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [poiList, setPoiList] = useState<POI[]>([]);
   const [loadingPOIs, setLoadingPOIs] = useState(false);
@@ -22,20 +24,22 @@ export default function HomeScreen() {
   const [loxoneTemp, setLoxoneTemp] = useState<number | null>(null);
   const [loxoneTimestamp, setLoxoneTimestamp] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadData();
+  // Reload data every time the screen comes into focus
+  // This ensures fresh Loxone data after changing sensor in SmartHomeScreen
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
 
-    // Initial weather fetch if POI is set
-    const initialFetch = async () => {
-      const storedPoi = await SharedStorage.getPointId();
-      if (storedPoi) {
-        await fetchWeatherData(storedPoi);
-      }
-    };
-    initialFetch();
-
-    // Note: Auto-refresh moved to _layout.tsx (app-wide)
-  }, []);
+      // Refetch weather if POI is set
+      const refetch = async () => {
+        const storedPoi = await SharedStorage.getPointId();
+        if (storedPoi) {
+          await fetchWeatherData(storedPoi);
+        }
+      };
+      refetch();
+    }, [])
+  );
 
   useEffect(() => {
     if (searchQuery.length >= 2) {
@@ -71,38 +75,42 @@ export default function HomeScreen() {
       setWeatherData(weather);
 
       // Also fetch Loxone temperature if configured
-      let loxoneTemp: number | undefined;
-      let loxoneTimestamp: string | undefined;
+      let newLoxoneTemp: number | null = null;
+      let newLoxoneTimestamp: string | null = null;
       const loxoneConfig = await SharedStorage.getLoxoneConfig();
       if (loxoneConfig?.enabled && loxoneConfig.temperatureSensorUUID) {
         try {
           const api = new LoxoneAPI(loxoneConfig);
           const temp = await api.getTemperature(loxoneConfig.temperatureSensorUUID);
-          loxoneTemp = temp;
-          loxoneTimestamp = new Date().toISOString();
-          await SharedStorage.setLoxoneSensorData({ temperature: temp, timestamp: loxoneTimestamp });
+          newLoxoneTemp = temp;
+          newLoxoneTimestamp = new Date().toISOString();
+          await SharedStorage.setLoxoneSensorData({ temperature: temp, timestamp: newLoxoneTimestamp });
         } catch (err) {
           console.warn('Loxone fetch failed:', err);
           const cached = await SharedStorage.getLoxoneSensorData();
           if (cached) {
-            loxoneTemp = cached.temperature;
-            loxoneTimestamp = cached.timestamp;
+            newLoxoneTemp = cached.temperature;
+            newLoxoneTimestamp = cached.timestamp;
           }
         }
       }
+
+      // Update local state
+      setLoxoneTemp(newLoxoneTemp);
+      setLoxoneTimestamp(newLoxoneTimestamp);
 
       // Update widget with fresh data
       await updateWidget({
         locationName: weather.locationName,
         temperatureActual: weather.temperatureActual,
         temperatureForecast: weather.temperatureForecast,
-        temperatureLoxone: loxoneTemp,
+        temperatureLoxone: newLoxoneTemp ?? undefined,
         symbolCode: weather.symbolCode,
         precipitation: weather.precipitation,
         buildNumber: BUILD_NUMBER,
         timestampActual: weather.timestampActual,
         timestampForecast: weather.timestampForecast,
-        timestampLoxone: loxoneTimestamp,
+        timestampLoxone: newLoxoneTimestamp ?? undefined,
       });
 
       return weather;
@@ -131,6 +139,20 @@ export default function HomeScreen() {
   console.log('Search query:', searchQuery);
   console.log('Total POIs in list:', poiList.length);
   console.log('Show suggestions:', showSuggestions);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const storedPoi = await SharedStorage.getPointId();
+      if (storedPoi) {
+        await fetchWeatherData(storedPoi);
+      }
+    } catch (error) {
+      console.error('Refresh failed:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const handlePOISelect = (poi: POI) => {
     setSearchQuery(poi.name);
@@ -196,7 +218,13 @@ export default function HomeScreen() {
         style={styles.keyboardAvoid}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <View style={styles.container}>
+        <ScrollView
+          style={styles.container}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          keyboardShouldPersistTaps="handled"
+        >
           <Text style={styles.label}>Standort suchen</Text>
 
           <View style={styles.searchContainer}>
@@ -293,7 +321,7 @@ export default function HomeScreen() {
                   </Text>
                 </View>
               )}
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -309,7 +337,7 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    padding: Spacing.screenHorizontal,
+    paddingHorizontal: Spacing.screenHorizontal,
   },
   label: {
     ...Typography.headline,

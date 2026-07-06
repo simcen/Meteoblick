@@ -33,6 +33,8 @@ export default function SmartHomeScreen() {
   const [showSensors, setShowSensors] = useState(true);
   const [showConnection, setShowConnection] = useState(true);
   const [savedSensorName, setSavedSensorName] = useState<string | undefined>();
+  const [previewTemperature, setPreviewTemperature] = useState<number | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   useEffect(() => {
     loadConfig();
@@ -96,6 +98,33 @@ export default function SmartHomeScreen() {
     }
   };
 
+  const selectSensor = async (uuid: string, name: string) => {
+    setSelectedSensorUUID(uuid);
+
+    // Fetch live temperature for preview
+    if (!username || !password) return;
+
+    setPreviewLoading(true);
+    setPreviewTemperature(null);
+
+    try {
+      const api = new LoxoneAPI({
+        cloudAddress,
+        username,
+        password,
+        localIP: manualLocalIP || undefined,
+      });
+      const temp = await api.getTemperature(uuid);
+      setPreviewTemperature(temp);
+      console.log('[SmartHome] Preview temperature:', temp);
+    } catch (error: any) {
+      console.warn('[SmartHome] Preview fetch failed:', error.message);
+      setPreviewTemperature(null);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
   const loadSensors = async () => {
     if (!username || !password) {
       Alert.alert('Fehler', 'Bitte Username und Passwort eingeben');
@@ -104,6 +133,7 @@ export default function SmartHomeScreen() {
 
     setLoadingSensors(true);
     setSensors([]); // Clear previous sensors
+    setPreviewTemperature(null); // Clear preview
 
     try {
       const api = new LoxoneAPI({
@@ -186,6 +216,7 @@ export default function SmartHomeScreen() {
             setShowConnection(true);
             setShowSensors(true);
             setSavedSensorName(undefined);
+            setPreviewTemperature(null);
             Alert.alert('Gelöscht', 'Loxone Konfiguration wurde gelöscht.');
           },
         },
@@ -194,8 +225,11 @@ export default function SmartHomeScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.contentContainer}
+      >
         <View style={styles.header}>
           <Text style={styles.title}>Loxone Smart Home</Text>
           <Text style={styles.subtitle}>Aussentemperatur ins Widget integrieren</Text>
@@ -322,39 +356,50 @@ export default function SmartHomeScreen() {
 
           {showSensors && (
             <View>
-              <Button
-                title="Sensoren laden"
-                onPress={loadSensors}
-                disabled={!username || !password || loadingSensors}
-                loading={loadingSensors}
-              />
+              {!configSaved && (
+                <>
+                  <Button
+                    title="Sensoren laden"
+                    onPress={loadSensors}
+                    disabled={!username || !password || loadingSensors}
+                    loading={loadingSensors}
+                  />
 
-              {loadingSensors && (
-                <View style={styles.loadingHint}>
-                  <Text style={styles.loadingHintText}>
-                    Structure File wird geladen...{'\n'}
-                    Bei großen Loxone-Projekten kann dies bis zu 90 Sekunden dauern.
-                  </Text>
-                </View>
+                  {loadingSensors && (
+                    <View style={styles.loadingHint}>
+                      <Text style={styles.loadingHintText}>
+                        Structure File wird geladen...{'\n'}
+                        Bei großen Loxone-Projekten kann dies bis zu 90 Sekunden dauern.
+                      </Text>
+                    </View>
+                  )}
+                </>
               )}
 
-              {sensors.length > 0 && (
+              {sensors.length > 0 ? (
                 <View style={styles.sensorList}>
                   <Text style={styles.sensorListTitle}>
                     {sensors.length} Sensor(en) gefunden
                   </Text>
 
-                  <TextInput
-                    style={styles.input}
-                    value={sensorSearchQuery}
-                    onChangeText={setSensorSearchQuery}
-                    placeholder="🔍 Sensor suchen (Name, Raum, Typ)..."
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
+                  {!configSaved && (
+                    <TextInput
+                      style={styles.input}
+                      value={sensorSearchQuery}
+                      onChangeText={setSensorSearchQuery}
+                      placeholder="🔍 Sensor suchen (Name, Raum, Typ)..."
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  )}
 
                   {sensors
                     .filter((sensor) => {
+                      // Im read-only Mode nur den gewählten Sensor zeigen
+                      if (configSaved) {
+                        return sensor.uuid === selectedSensorUUID;
+                      }
+                      // Im Edit-Mode nach Query filtern
                       if (!sensorSearchQuery.trim()) return true;
                       const query = sensorSearchQuery.toLowerCase();
                       return (
@@ -371,13 +416,30 @@ export default function SmartHomeScreen() {
                           styles.sensorItem,
                           selectedSensorUUID === sensor.uuid && styles.sensorItemSelected,
                         ]}
-                        onPress={() => setSelectedSensorUUID(sensor.uuid)}
+                        onPress={() => !configSaved && selectSensor(sensor.uuid, sensor.name)}
+                        disabled={configSaved}
                       >
                         <View style={styles.sensorInfo}>
                           <Text style={styles.sensorName}>{sensor.name}</Text>
                           <Text style={styles.sensorDetails}>
                             {sensor.room} • {sensor.type}
                           </Text>
+                          {/* Live-Temperature Preview für gewählten Sensor */}
+                          {selectedSensorUUID === sensor.uuid && !configSaved && (
+                            <View style={styles.previewRow}>
+                              {previewLoading ? (
+                                <Text style={styles.previewLoading}>🌡️ Lade...</Text>
+                              ) : previewTemperature !== null ? (
+                                <Text style={styles.previewTemp}>
+                                  🌡️ Aktuell: {previewTemperature.toFixed(1)}°C
+                                </Text>
+                              ) : (
+                                <Text style={styles.previewError}>
+                                  ⚠️ Konnte nicht abgerufen werden
+                                </Text>
+                              )}
+                            </View>
+                          )}
                         </View>
                         {selectedSensorUUID === sensor.uuid && (
                           <Text style={styles.checkmark}>✓</Text>
@@ -385,22 +447,28 @@ export default function SmartHomeScreen() {
                       </TouchableOpacity>
                     ))}
 
-                  {sensors.filter((sensor) => {
-                    if (!sensorSearchQuery.trim()) return true;
-                    const query = sensorSearchQuery.toLowerCase();
-                    return (
-                      sensor.name.toLowerCase().includes(query) ||
-                      sensor.room.toLowerCase().includes(query) ||
-                      sensor.type.toLowerCase().includes(query) ||
-                      sensor.category.toLowerCase().includes(query)
-                    );
-                  }).length === 0 && (
-                    <Text style={styles.noResults}>
-                      Keine Sensoren gefunden für "{sensorSearchQuery}"
-                    </Text>
-                  )}
+                  {!configSaved &&
+                    sensors.filter((sensor) => {
+                      if (!sensorSearchQuery.trim()) return true;
+                      const query = sensorSearchQuery.toLowerCase();
+                      return (
+                        sensor.name.toLowerCase().includes(query) ||
+                        sensor.room.toLowerCase().includes(query) ||
+                        sensor.type.toLowerCase().includes(query) ||
+                        sensor.category.toLowerCase().includes(query)
+                      );
+                    }).length === 0 && (
+                      <Text style={styles.noResults}>
+                        Keine Sensoren gefunden für "{sensorSearchQuery}"
+                      </Text>
+                    )}
                 </View>
-              )}
+              ) : configSaved ? (
+                <View style={styles.readOnlySensorInfo}>
+                  <Text style={styles.readOnlyLabel}>Gewählter Sensor:</Text>
+                  <Text style={styles.readOnlyValue}>{savedSensorName || 'Unbekannt'}</Text>
+                </View>
+              ) : null}
             </View>
           )}
         </View>
@@ -459,6 +527,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: Spacing.screenHorizontal,
+    paddingBottom: 120, // Extra space for tab bar
   },
   header: {
     marginBottom: Spacing.lg,
@@ -621,5 +690,41 @@ const styles = StyleSheet.create({
     ...Typography.subheadline,
     color: Colors.tint,
     fontWeight: '600',
+  },
+  readOnlySensorInfo: {
+    backgroundColor: Colors.background.secondary,
+    borderRadius: Layout.radius.md,
+    borderWidth: Layout.border.normal,
+    borderColor: Colors.separator.opaque,
+    padding: Spacing.md,
+    marginTop: Spacing.sm,
+  },
+  readOnlyLabel: {
+    ...Typography.caption,
+    color: Colors.label.secondary,
+    marginBottom: Spacing.xs,
+  },
+  readOnlyValue: {
+    ...Typography.body,
+    color: Colors.label.primary,
+    fontWeight: '500',
+  },
+  previewRow: {
+    marginTop: Spacing.xs,
+  },
+  previewLoading: {
+    ...Typography.caption,
+    color: Colors.label.secondary,
+    fontStyle: 'italic',
+  },
+  previewTemp: {
+    ...Typography.caption,
+    color: Colors.tint,
+    fontWeight: '600',
+  },
+  previewError: {
+    ...Typography.caption,
+    color: '#FF6B6B',
+    fontStyle: 'italic',
   },
 });

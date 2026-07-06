@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SharedStorage } from '../storage/SharedStorage';
 import { MeteoSwissAPI } from '../api/meteoswiss';
@@ -19,6 +19,9 @@ export default function DebugScreen() {
   const [nextWidgetRefresh, setNextWidgetRefresh] = useState<string | null>(null);
   const [nextFreshData, setNextFreshData] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loxoneConfig, setLoxoneConfig] = useState<any>(null);
+  const [loxoneSensorData, setLoxoneSensorData] = useState<any>(null);
 
   useEffect(() => {
     loadDebugInfo();
@@ -39,6 +42,12 @@ export default function DebugScreen() {
     // Load widget refresh info
     const timestamp = await SharedStorage.getWidgetLastRefresh();
     setWidgetLastRefresh(timestamp);
+
+    // Load Loxone info
+    const config = await SharedStorage.getLoxoneConfig();
+    setLoxoneConfig(config);
+    const sensorData = await SharedStorage.getLoxoneSensorData();
+    setLoxoneSensorData(sensorData);
 
     // Check background fetch status
     const status = await BackgroundFetch.getStatusAsync();
@@ -127,9 +136,20 @@ export default function DebugScreen() {
     }
   };
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadDebugInfo();
+    setRefreshing(false);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <ScrollView style={styles.scrollView}>
+      <ScrollView
+        style={styles.scrollView}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         <View style={styles.container}>
           <View style={styles.debugContainer}>
             <Text style={styles.debugTitle}>🔍 Debug Info</Text>
@@ -183,6 +203,55 @@ export default function DebugScreen() {
                 {nextFreshData ? new Date(nextFreshData).toLocaleString('de-CH') : 'n/a'}
               </Text>
             </View>
+
+            <Text style={styles.debugSectionTitle}>🏠 Loxone</Text>
+            <View style={styles.debugRow}>
+              <Text style={styles.debugLabel}>Aktiviert:</Text>
+              <Text style={styles.debugValue}>{loxoneConfig?.enabled ? '✅ Ja' : '❌ Nein'}</Text>
+            </View>
+            {loxoneConfig && (
+              <>
+                <View style={styles.debugRow}>
+                  <Text style={styles.debugLabel}>Cloud SNR:</Text>
+                  <Text style={styles.debugValue}>{loxoneConfig.cloudAddress}</Text>
+                </View>
+                <View style={styles.debugRow}>
+                  <Text style={styles.debugLabel}>Username:</Text>
+                  <Text style={styles.debugValue}>{loxoneConfig.username}</Text>
+                </View>
+                {loxoneConfig.localIP && (
+                  <View style={styles.debugRow}>
+                    <Text style={styles.debugLabel}>Lokale IP:</Text>
+                    <Text style={styles.debugValue}>{loxoneConfig.localIP}</Text>
+                  </View>
+                )}
+                <View style={styles.debugRow}>
+                  <Text style={styles.debugLabel}>Sensor UUID:</Text>
+                  <Text style={[styles.debugValue, styles.uuidText]} numberOfLines={1}>
+                    {loxoneConfig.temperatureSensorUUID || 'n/a'}
+                  </Text>
+                </View>
+              </>
+            )}
+            {loxoneSensorData ? (
+              <>
+                <View style={styles.debugRow}>
+                  <Text style={styles.debugLabel}>Letzte Temperatur:</Text>
+                  <Text style={styles.debugValue}>{loxoneSensorData.temperature.toFixed(1)}°C</Text>
+                </View>
+                <View style={styles.debugRow}>
+                  <Text style={styles.debugLabel}>Sensor Update:</Text>
+                  <Text style={styles.debugValue}>
+                    {new Date(loxoneSensorData.timestamp).toLocaleString('de-CH')}
+                  </Text>
+                </View>
+              </>
+            ) : loxoneConfig?.enabled ? (
+              <View style={styles.debugRow}>
+                <Text style={styles.debugLabel}>Sensor Daten:</Text>
+                <Text style={styles.debugValue}>Noch keine Daten</Text>
+              </View>
+            ) : null}
 
             <Text style={styles.debugSectionTitle}>🔄 Background Fetch</Text>
             <View style={styles.debugRow}>
@@ -292,6 +361,10 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     flex: 1,
     textAlign: 'right',
+  },
+  uuidText: {
+    fontSize: 10,
+    fontFamily: 'Courier',
   },
   debugButton: {
     marginTop: 16,
