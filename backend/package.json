@@ -6,15 +6,16 @@
   "type": "module",
   "scripts": {
     "dev": "NODE_OPTIONS='--dns-result-order=ipv4first' tsx watch src/index.ts",
-    "build": "prisma generate && tsc && echo 'Build successful'",
-    "start": "NODE_OPTIONS='--dns-result-order=ipv4first' node dist/index.js",
+    "build": "prisma generate",
+    "start": "NODE_OPTIONS='--dns-result-order=ipv4first' tsx src/index.ts",
     "sync": "NODE_OPTIONS='--dns-result-order=ipv4first' tsx src/cron/sync-weather.ts",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
-    "heroku-postbuild": "prisma generate && pnpm build"
+    "heroku-postbuild": "prisma generate"
   },
   "keywords": [
     "weather",
@@ -35,6 +36,7 @@
     "papaparse": "^5.4.1",
     "pg": "^8.22.0",
     "prisma": "7.8.0",
+    "tsx": "4.19.2",
     "undici": "^6.27.0",
     "zod": "^4.4.3"
   },
@@ -44,7 +46,6 @@
     "@types/papaparse": "^5.3.15",
     "@types/pg": "^8.20.0",
     "@vitest/ui": "^4.1.9",
-    "tsx": "4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^4.1.9"
   },
