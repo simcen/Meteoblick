@@ -3,6 +3,7 @@ import { View, Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform, Touc
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SharedStorage } from '../storage/SharedStorage';
 import { MeteoSwissAPI } from '../api/meteoswiss';
+import { LoxoneAPI } from '../api/loxone';
 import { updateWidget } from '../widgets/widgetManager';
 import { Button } from '../components/Button';
 import { Colors, Typography, Spacing, Layout, ComponentStyles } from '../constants/designSystem';
@@ -18,6 +19,8 @@ export default function HomeScreen() {
   const [poiList, setPoiList] = useState<POI[]>([]);
   const [loadingPOIs, setLoadingPOIs] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [loxoneTemp, setLoxoneTemp] = useState<number | null>(null);
+  const [loxoneTimestamp, setLoxoneTimestamp] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -52,6 +55,13 @@ export default function HomeScreen() {
     if (storedWeather) {
       setWeatherData(storedWeather);
     }
+
+    // Load cached Loxone data
+    const cachedLoxone = await SharedStorage.getLoxoneSensorData();
+    if (cachedLoxone) {
+      setLoxoneTemp(cachedLoxone.temperature);
+      setLoxoneTimestamp(cachedLoxone.timestamp);
+    }
   };
 
   const fetchWeatherData = async (poiId: string): Promise<WeatherData | null> => {
@@ -60,16 +70,39 @@ export default function HomeScreen() {
       await SharedStorage.setWeatherData(weather);
       setWeatherData(weather);
 
+      // Also fetch Loxone temperature if configured
+      let loxoneTemp: number | undefined;
+      let loxoneTimestamp: string | undefined;
+      const loxoneConfig = await SharedStorage.getLoxoneConfig();
+      if (loxoneConfig?.enabled && loxoneConfig.temperatureSensorUUID) {
+        try {
+          const api = new LoxoneAPI(loxoneConfig);
+          const temp = await api.getTemperature(loxoneConfig.temperatureSensorUUID);
+          loxoneTemp = temp;
+          loxoneTimestamp = new Date().toISOString();
+          await SharedStorage.setLoxoneSensorData({ temperature: temp, timestamp: loxoneTimestamp });
+        } catch (err) {
+          console.warn('Loxone fetch failed:', err);
+          const cached = await SharedStorage.getLoxoneSensorData();
+          if (cached) {
+            loxoneTemp = cached.temperature;
+            loxoneTimestamp = cached.timestamp;
+          }
+        }
+      }
+
       // Update widget with fresh data
       await updateWidget({
         locationName: weather.locationName,
         temperatureActual: weather.temperatureActual,
         temperatureForecast: weather.temperatureForecast,
+        temperatureLoxone: loxoneTemp,
         symbolCode: weather.symbolCode,
         precipitation: weather.precipitation,
         buildNumber: BUILD_NUMBER,
         timestampActual: weather.timestampActual,
         timestampForecast: weather.timestampForecast,
+        timestampLoxone: loxoneTimestamp,
       });
 
       return weather;
@@ -234,21 +267,29 @@ export default function HomeScreen() {
                     <Text style={styles.weatherValue}>{weatherData.location}</Text>
                   </View>
                   <View style={styles.weatherRow}>
-                    <Text style={styles.weatherLabel}>Temperatur IST</Text>
+                    <Text style={styles.weatherLabel}>☁️ MeteoSwiss IST</Text>
                     <Text style={styles.weatherValue}>{weatherData.temperatureActual?.toFixed(1) ?? '--'}°C</Text>
                   </View>
                   <View style={styles.weatherRow}>
-                    <Text style={styles.weatherLabel}>Temperatur Prognose</Text>
+                    <Text style={styles.weatherLabel}>☁️ MeteoSwiss Prognose</Text>
                     <Text style={styles.weatherValue}>{weatherData.temperatureForecast?.toFixed(1) ?? '--'}°C</Text>
                   </View>
+                  {loxoneTemp !== null && (
+                    <View style={styles.weatherRow}>
+                      <Text style={styles.weatherLabel}>🏠 Loxone Sensor IST</Text>
+                      <Text style={styles.weatherValue}>{loxoneTemp.toFixed(1)}°C</Text>
+                    </View>
+                  )}
                   <View style={[styles.weatherRow, styles.weatherRowLast]}>
                     <Text style={styles.weatherLabel}>Niederschlag</Text>
                     <Text style={styles.weatherValue}>{weatherData.precipitation.toFixed(1)} mm</Text>
                   </View>
                   <Text style={styles.weatherTimestamp}>
-                    {weatherData.timestampActual && `IST: ${new Date(weatherData.timestampActual).toLocaleString('de-CH')}`}
+                    {weatherData.timestampActual && `MeteoSwiss IST: ${new Date(weatherData.timestampActual).toLocaleString('de-CH')}`}
                     {weatherData.timestampActual && weatherData.timestampForecast && '\n'}
                     {weatherData.timestampForecast && `Prognose: ${new Date(weatherData.timestampForecast).toLocaleString('de-CH')}`}
+                    {loxoneTimestamp && '\n'}
+                    {loxoneTimestamp && `Loxone: ${new Date(loxoneTimestamp).toLocaleString('de-CH')}`}
                   </Text>
                 </View>
               )}

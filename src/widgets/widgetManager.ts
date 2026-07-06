@@ -18,13 +18,15 @@ import { APP_GROUP_ID, WIDGET_LAST_REFRESH_KEY } from '../constants';
 // Widget props type
 export interface WidgetProps {
   locationName: string;
-  temperatureActual?: number;      // IST Temperatur (letzte vergangene Stunde)
-  temperatureForecast?: number;    // Prognose Temperatur (nächste zukünftige Stunde)
+  temperatureActual?: number;      // MeteoSwiss IST (letzte vergangene Stunde)
+  temperatureForecast?: number;    // MeteoSwiss Prognose (nächste zukünftige Stunde)
+  temperatureLoxone?: number;      // Loxone Sensor IST
   symbolCode: number;
   precipitation: number;
   buildNumber: string;
-  timestampActual?: string;       // ISO timestamp für IST
-  timestampForecast?: string;     // ISO timestamp für Prognose
+  timestampActual?: string;       // ISO timestamp für MeteoSwiss IST
+  timestampForecast?: string;     // ISO timestamp für MeteoSwiss Prognose
+  timestampLoxone?: string;       // ISO timestamp für Loxone
   refreshedAt?: string;           // ISO timestamp when widget was updated
 }
 

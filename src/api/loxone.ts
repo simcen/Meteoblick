@@ -98,28 +98,59 @@ export class LoxoneAPI {
    */
   async getConnection(): Promise<LoxoneConnection> {
     if (this.connection) {
+      console.log('[Loxone] Using cached connection:', this.connection.type);
       return this.connection;
     }
 
+    console.log('[Loxone] Auto-detecting connection...');
+
+    // 0. Check for manual local IP (bypasses DNS query)
+    if (this.config.localIP) {
+      const localURL = `http://${this.config.localIP}`;
+      console.log('[Loxone] Using manual local IP:', localURL);
+
+      const isReachable = await this.testConnection(localURL, 3000);
+
+      if (isReachable) {
+        this.connection = { baseURL: localURL, type: 'local' };
+        console.log('✅ [Loxone] Manual local connection successful:', localURL);
+        return this.connection;
+      } else {
+        console.log('⚠️ [Loxone] Manual local IP not reachable, trying DNS...');
+      }
+    }
+
     // 1. Query Loxone Cloud DNS Service
+    console.log('[Loxone] Querying DNS for SNR:', this.config.cloudAddress);
     const dnsInfo = await this.queryDNS();
+    console.log('[Loxone] DNS response:', {
+      localIP: dnsInfo.localIP,
+      localPort: dnsInfo.localPort,
+      cloudIP: dnsInfo.ip,
+    });
 
     // 2. Test local connection if localIP available
     if (dnsInfo.localIP) {
       const localURL = `http://${dnsInfo.localIP}:${dnsInfo.localPort || 80}`;
-      const isLocalReachable = await this.testConnection(localURL, 2000);
+      console.log('[Loxone] Testing local connection:', localURL);
+
+      const isLocalReachable = await this.testConnection(localURL, 3000);
 
       if (isLocalReachable) {
         this.connection = { baseURL: localURL, type: 'local' };
-        console.log('✅ Using local Loxone connection:', localURL);
+        console.log('✅ [Loxone] Using local connection:', localURL);
         return this.connection;
+      } else {
+        console.log('⚠️ [Loxone] Local connection not reachable (timeout 3s)');
       }
+    } else {
+      console.log('[Loxone] No localIP in DNS response');
     }
 
     // 3. Fallback to cloud
     const cloudURL = `https://connect.loxonecloud.com/${this.config.cloudAddress}`;
     this.connection = { baseURL: cloudURL, type: 'cloud' };
-    console.log('☁️ Using cloud Loxone connection:', cloudURL);
+    console.log('☁️ [Loxone] Using cloud connection:', cloudURL);
     return this.connection;
   }
 
@@ -129,18 +160,36 @@ export class LoxoneAPI {
   private async queryDNS(): Promise<LoxoneDNSResponse> {
     const url = `https://dns.loxonecloud.com/?getip&snr=${this.config.cloudAddress}&json=true`;
 
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Loxone DNS query failed: ${response.status}`);
+    console.log('[Loxone] DNS query:', url);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`Loxone DNS query failed: ${response.status} ${response.statusText}`);
+      }
+
+      const data: LoxoneDNSResponse = await response.json();
+      console.log('[Loxone] DNS response code:', data.Code);
+
+      if (data.Code !== 200) {
+        throw new Error(`Loxone DNS returned error code: ${data.Code}`);
+      }
+
+      return data;
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+
+      if (error.name === 'AbortError') {
+        throw new Error('Loxone DNS query timeout (10s). Keine Internetverbindung?');
+      }
+
+      throw error;
     }
-
-    const data: LoxoneDNSResponse = await response.json();
-
-    if (data.Code !== 200) {
-      throw new Error(`Loxone DNS returned error code: ${data.Code}`);
-    }
-
-    return data;
   }
 
   /**
@@ -170,29 +219,72 @@ export class LoxoneAPI {
   /**
    * Get Structure File (LoxAPP3.json)
    * Contains all controls, sensors, rooms, categories
+   *
+   * Note: Structure File can be VERY large (5-20MB) for complex projects
    */
   async getStructureFile(): Promise<LoxoneStructureFile> {
     const conn = await this.getConnection();
 
-    const response = await fetch(`${conn.baseURL}/data/LoxAPP3.json`, {
-      headers: {
-        Authorization: this.getAuthHeader(),
-      },
-    });
+    console.log('[Loxone] Fetching Structure File from:', conn.baseURL);
+    console.log('[Loxone] This may take 30-60 seconds for large projects...');
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch Structure File: ${response.status}`);
+    // Structure File can be very large - use 90s timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.log('[Loxone] Structure File fetch timeout after 90s');
+      controller.abort();
+    }, 90000);
+
+    try {
+      const startTime = Date.now();
+
+      const response = await fetch(`${conn.baseURL}/data/LoxAPP3.json`, {
+        headers: {
+          Authorization: this.getAuthHeader(),
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch Structure File: ${response.status} ${response.statusText}`);
+      }
+
+      console.log('[Loxone] Response received, parsing JSON...');
+      const data = await response.json();
+
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.log(`[Loxone] Structure File loaded successfully (${elapsed}s)`);
+
+      return data;
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+
+      if (error.name === 'AbortError') {
+        throw new Error(
+          'Structure File Download Timeout (90s).\n\n' +
+            'Dein Loxone Projekt ist sehr groß oder die Verbindung ist zu langsam.\n\n' +
+            'Versuche:\n' +
+            '• Lokale Verbindung (WLAN) statt Cloud\n' +
+            '• Miniserver neu starten'
+        );
+      }
+
+      throw error;
     }
-
-    return response.json();
   }
 
   /**
    * Get all temperature sensors from Structure File
    */
   async getTemperatureSensors(): Promise<LoxoneTemperatureSensor[]> {
+    console.log('[Loxone] Getting temperature sensors...');
     const structureFile = await this.getStructureFile();
     const sensors: LoxoneTemperatureSensor[] = [];
+
+    console.log('[Loxone] Parsing controls...');
+    console.log('[Loxone] Total controls:', Object.keys(structureFile.controls).length);
 
     // Filter controls for temperature sensors
     // Types that contain temperature: InfoOnlyAnalog, IRoomControllerV2, etc.
@@ -200,6 +292,7 @@ export class LoxoneAPI {
       const isTemperatureSensor =
         control.type === 'InfoOnlyAnalog' ||
         control.type === 'IRoomControllerV2' ||
+        control.type === 'IRoomController' ||
         (control.states?.temperature !== undefined);
 
       if (isTemperatureSensor) {
@@ -216,6 +309,7 @@ export class LoxoneAPI {
       }
     }
 
+    console.log(`[Loxone] Found ${sensors.length} temperature sensors`);
     return sensors;
   }
 

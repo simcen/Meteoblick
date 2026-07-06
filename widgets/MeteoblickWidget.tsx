@@ -11,13 +11,15 @@ import { createWidget, type WidgetEnvironment } from 'expo-widgets';
 
 interface WeatherProps {
   locationName: string;
-  temperatureActual?: number;       // IST Temperatur (letzte vergangene Stunde)
-  temperatureForecast?: number;     // Prognose Temperatur (nächste zukünftige Stunde)
+  temperatureActual?: number;       // MeteoSwiss IST (letzte vergangene Stunde)
+  temperatureForecast?: number;     // MeteoSwiss Prognose (nächste zukünftige Stunde)
+  temperatureLoxone?: number;       // Loxone Sensor IST
   symbolCode: number;
   precipitation: number;
   buildNumber: string;
-  timestampActual?: string;        // ISO timestamp für IST
-  timestampForecast?: string;      // ISO timestamp für Prognose
+  timestampActual?: string;        // ISO timestamp für MeteoSwiss IST
+  timestampForecast?: string;      // ISO timestamp für MeteoSwiss Prognose
+  timestampLoxone?: string;        // ISO timestamp für Loxone
   refreshedAt?: string;            // ISO timestamp when widget was updated
 }
 
@@ -150,8 +152,11 @@ const MeteoblickWidget = (
 
         <Spacer />
 
-        {/* Temperature (IST) */}
-        <HStack spacing={2}>
+        {/* Temperature (IST) - MeteoSwiss */}
+        <HStack spacing={2} alignment="center">
+          <Text modifiers={[font({ size: 10, weight: 'medium' }), foregroundStyle('#FFFFFFB0')]}>
+            ☁️
+          </Text>
           <Text modifiers={[font({ size: tempFontSize, weight: 'bold' }), foregroundStyle('#FFFFFF')]}>
             {(props.temperatureActual !== undefined && props.temperatureActual !== null) ? props.temperatureActual.toFixed(1) : '--'}
           </Text>
@@ -159,6 +164,18 @@ const MeteoblickWidget = (
             °C
           </Text>
         </HStack>
+
+        {/* Loxone Temperature - nur zeigen wenn verfügbar und medium/large */}
+        {props.temperatureLoxone !== undefined && !isSmall && (
+          <HStack spacing={2} alignment="center">
+            <Text modifiers={[font({ size: 10, weight: 'medium' }), foregroundStyle('#FFFFFFB0')]}>
+              🏠
+            </Text>
+            <Text modifiers={[font({ size: precipFontSize + 4, weight: 'semibold' }), foregroundStyle('#FFFFFF')]}>
+              {props.temperatureLoxone.toFixed(1)}°
+            </Text>
+          </HStack>
+        )}
 
         {/* Precipitation - hide on small widgets to save space */}
         {props.precipitation > 0 && !isSmall && (

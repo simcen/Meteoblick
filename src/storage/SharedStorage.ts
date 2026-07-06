@@ -113,6 +113,7 @@ export const SharedStorage = {
     username: string;
     password: string;
     temperatureSensorUUID?: string;
+    localIP?: string;
     enabled: boolean;
   } | null> {
     try {
@@ -130,6 +131,7 @@ export const SharedStorage = {
     username: string;
     password: string;
     temperatureSensorUUID?: string;
+    localIP?: string;
     enabled: boolean;
   }): Promise<void> {
     try {
@@ -148,6 +150,26 @@ export const SharedStorage = {
       console.log('✅ Loxone config deleted');
     } catch (error) {
       console.error('Failed to delete Loxone config:', error);
+      throw error;
+    }
+  },
+
+  async getLoxoneSensorData(): Promise<{ temperature: number; timestamp: string } | null> {
+    try {
+      const json = await SharedGroupPreferences.getItem('loxone_sensor_data', APP_GROUP_ID);
+      if (!json) return null;
+      return JSON.parse(json);
+    } catch (error) {
+      return null;
+    }
+  },
+
+  async setLoxoneSensorData(data: { temperature: number; timestamp: string }): Promise<void> {
+    try {
+      const json = JSON.stringify(data);
+      await SharedGroupPreferences.setItem('loxone_sensor_data', json, APP_GROUP_ID);
+    } catch (error) {
+      console.error('Failed to save Loxone sensor data:', error);
       throw error;
     }
   },
