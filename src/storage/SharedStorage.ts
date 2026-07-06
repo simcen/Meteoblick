@@ -106,4 +106,49 @@ export const SharedStorage = {
       return null;
     }
   },
+
+  // Loxone Configuration
+  async getLoxoneConfig(): Promise<{
+    cloudAddress: string;
+    username: string;
+    password: string;
+    temperatureSensorUUID?: string;
+    enabled: boolean;
+  } | null> {
+    try {
+      const json = await AsyncStorage.getItem('loxone_config');
+      if (!json) return null;
+      return JSON.parse(json);
+    } catch (error) {
+      console.error('Failed to read Loxone config:', error);
+      return null;
+    }
+  },
+
+  async setLoxoneConfig(config: {
+    cloudAddress: string;
+    username: string;
+    password: string;
+    temperatureSensorUUID?: string;
+    enabled: boolean;
+  }): Promise<void> {
+    try {
+      const json = JSON.stringify(config);
+      await AsyncStorage.setItem('loxone_config', json);
+      console.log('✅ Loxone config saved');
+    } catch (error) {
+      console.error('Failed to save Loxone config:', error);
+      throw error;
+    }
+  },
+
+  async deleteLoxoneConfig(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem('loxone_config');
+      console.log('✅ Loxone config deleted');
+    } catch (error) {
+      console.error('Failed to delete Loxone config:', error);
+      throw error;
+    }
+  },
 };
