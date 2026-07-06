@@ -30,7 +30,12 @@ export interface WidgetProps {
 
 /**
  * Updates the widget with new data
- * Widget updates automatically after updateSnapshot() - no .reload() needed!
+ *
+ * On physical devices, widgets don't auto-refresh from Background Fetch
+ * until iOS has "learned" the app's usage pattern (24-48 hours).
+ *
+ * We write data to SharedStorage so the widget CAN read it when iOS
+ * decides to refresh, but we can't force refresh from JS.
  */
 export async function updateWidget(props: WidgetProps): Promise<void> {
   console.log('📱 Updating widget with data:', props);
@@ -38,20 +43,20 @@ export async function updateWidget(props: WidgetProps): Promise<void> {
   try {
     const now = new Date().toISOString();
 
-    // Update widget snapshot with refresh timestamp
+    // Update widget snapshot (works in Simulator and when app is foreground)
     meteoblickWidget.updateSnapshot({
       ...props,
       refreshedAt: now,
     });
 
-    // Save timestamp of widget update
+    // Save timestamp of widget update to SharedStorage
     await SharedGroupPreferences.setItem(
       WIDGET_LAST_REFRESH_KEY,
       now,
       APP_GROUP_ID
     );
 
-    console.log('✅ Widget snapshot updated');
+    console.log('✅ Widget snapshot updated + data saved to SharedStorage');
   } catch (error) {
     console.error('❌ Failed to update widget:', error);
     throw error;
