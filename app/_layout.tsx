@@ -1,9 +1,7 @@
-import { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeBottomTabNavigator } from '@bottom-tabs/react-navigation';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Platform } from 'react-native';
-import { registerBackgroundFetch } from '../src/tasks/weatherBackgroundTask';
+import { AppProvider } from '../src/providers/AppProvider';
 
 import HomeScreen from '../src/screens/HomeScreen';
 import SmartHomeScreen from '../src/screens/SmartHomeScreen';
@@ -23,14 +21,11 @@ const TabBarIcon = (sfSymbolName: string) => {
 };
 
 export default function RootLayout() {
-  useEffect(() => {
-    registerBackgroundFetch();
-  }, []);
-
   return (
-    <SafeAreaProvider>
-      <NavigationContainer independent={true}>
-        <Tabs.Navigator>
+    <AppProvider>
+      <SafeAreaProvider>
+        <NavigationContainer independent={true}>
+          <Tabs.Navigator>
           <Tabs.Screen
             name="Wetter"
             component={HomeScreen}
@@ -59,7 +54,8 @@ export default function RootLayout() {
             }}
           />
         </Tabs.Navigator>
-      </NavigationContainer>
-    </SafeAreaProvider>
+        </NavigationContainer>
+      </SafeAreaProvider>
+    </AppProvider>
   );
 }

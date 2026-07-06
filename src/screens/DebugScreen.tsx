@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SharedStorage } from '../storage/SharedStorage';
 import { MeteoSwissAPI } from '../api/meteoswiss';
@@ -15,6 +15,9 @@ export default function DebugScreen() {
   const [backendDebugInfo, setBackendDebugInfo] = useState<any>(null);
   const [nextAppFetch, setNextAppFetch] = useState<string | null>(null);
   const [bgFetchStatus, setBgFetchStatus] = useState<string>('unknown');
+  const [nextBgFetch, setNextBgFetch] = useState<string | null>(null);
+  const [nextWidgetRefresh, setNextWidgetRefresh] = useState<string | null>(null);
+  const [nextFreshData, setNextFreshData] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
 
   useEffect(() => {
@@ -60,6 +63,33 @@ export default function DebugScreen() {
       const lastFetchTime = new Date(info.timestamp).getTime();
       const nextFetchTime = lastFetchTime + 5 * 60 * 1000;
       setNextAppFetch(new Date(nextFetchTime).toISOString());
+    }
+
+    // Calculate next background fetch (15 minutes from last widget refresh)
+    // Note: iOS controls actual timing, this is just the earliest possible time
+    if (timestamp) {
+      const now = Date.now();
+      const lastWidgetTime = new Date(timestamp).getTime();
+      const calculatedNextBg = lastWidgetTime + 15 * 60 * 1000;
+
+      // If calculated time is in the past, next fetch is overdue (show "now" or next interval from now)
+      const nextBgTime = calculatedNextBg < now ? now : calculatedNextBg;
+      setNextBgFetch(new Date(nextBgTime).toISOString());
+
+      // Widget refresh happens when background fetch runs
+      setNextWidgetRefresh(new Date(nextBgTime).toISOString());
+    }
+
+    // Next fresh data = earliest of next app fetch or next bg fetch
+    const now = Date.now();
+    const bgTime = timestamp ? Math.max(new Date(timestamp).getTime() + 15 * 60 * 1000, now) : null;
+    const times = [nextAppFetch, bgTime]
+      .filter(Boolean)
+      .map(t => typeof t === 'string' ? new Date(t).getTime() : t);
+
+    if (times.length > 0) {
+      const earliest = Math.min(...times);
+      setNextFreshData(new Date(earliest).toISOString());
     }
   };
 
@@ -139,6 +169,18 @@ export default function DebugScreen() {
                 {widgetLastRefresh ? new Date(widgetLastRefresh).toLocaleString('de-CH') : 'n/a'}
               </Text>
             </View>
+            <View style={styles.debugRow}>
+              <Text style={styles.debugLabel}>Nächstes Refresh:</Text>
+              <Text style={styles.debugValue}>
+                {nextWidgetRefresh ? new Date(nextWidgetRefresh).toLocaleString('de-CH') : 'n/a'}
+              </Text>
+            </View>
+            <View style={styles.debugRow}>
+              <Text style={styles.debugLabel}>Nächste frische Daten:</Text>
+              <Text style={styles.debugValue}>
+                {nextFreshData ? new Date(nextFreshData).toLocaleString('de-CH') : 'n/a'}
+              </Text>
+            </View>
 
             <Text style={styles.debugSectionTitle}>🔄 Background Fetch</Text>
             <View style={styles.debugRow}>
@@ -148,6 +190,23 @@ export default function DebugScreen() {
             <View style={styles.debugRow}>
               <Text style={styles.debugLabel}>Intervall:</Text>
               <Text style={styles.debugValue}>15 min (iOS Minimum)</Text>
+            </View>
+            <View style={styles.debugRow}>
+              <View style={styles.labelWithIcon}>
+                <Text style={styles.debugLabel}>Nächster Run:</Text>
+                <TouchableOpacity
+                  onPress={() => Alert.alert(
+                    'Background Fetch Timing',
+                    'iOS kontrolliert den genauen Zeitpunkt des Background Fetch basierend auf App-Nutzung, Batteriestand und anderen System-Bedingungen. Die angezeigte Zeit ist die früheste mögliche Ausführung.'
+                  )}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Text style={styles.infoIcon}>ℹ️</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.debugValue}>
+                {nextBgFetch ? new Date(nextBgFetch).toLocaleString('de-CH') : 'n/a'}
+              </Text>
             </View>
             <View style={styles.debugButton}>
               <Button
@@ -234,5 +293,15 @@ const styles = StyleSheet.create({
   },
   debugButton: {
     marginTop: 16,
+  },
+  labelWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flex: 1,
+  },
+  infoIcon: {
+    fontSize: 14,
+    opacity: 0.6,
   },
 });

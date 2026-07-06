@@ -7,6 +7,7 @@ BUNDLE_PATH="ios/main.jsbundle"
 # Check if archive exists
 if [ ! -d "$ARCHIVE_PATH" ]; then
   echo "📦 No archive found, building from scratch..."
+  # Don't increment here - ios:archive already does it
   pnpm ios:archive
 else
   # Find newest source file

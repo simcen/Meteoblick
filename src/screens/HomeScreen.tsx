@@ -31,18 +31,7 @@ export default function HomeScreen() {
     };
     initialFetch();
 
-    // Auto-refresh weather data every 5 minutes
-    const weatherInterval = setInterval(async () => {
-      const storedPoi = await SharedStorage.getPointId();
-      if (storedPoi) {
-        console.log('[App] Auto-refreshing weather data...');
-        await fetchWeatherData(storedPoi);
-      }
-    }, 5 * 60 * 1000); // 5 minutes
-
-    return () => {
-      clearInterval(weatherInterval);
-    };
+    // Note: Auto-refresh moved to _layout.tsx (app-wide)
   }, []);
 
   useEffect(() => {
@@ -70,6 +59,17 @@ export default function HomeScreen() {
       const weather = await MeteoSwissAPI.fetchWeatherData(poiId);
       await SharedStorage.setWeatherData(weather);
       setWeatherData(weather);
+
+      // Update widget with fresh data
+      await updateWidget({
+        locationName: weather.locationName,
+        temperature: weather.temperature,
+        symbolCode: weather.symbolCode,
+        precipitation: weather.precipitation,
+        buildNumber: BUILD_NUMBER,
+        timestamp: weather.timestamp,
+      });
+
       return weather;
     } catch (error) {
       console.error('Failed to fetch weather data:', error);
