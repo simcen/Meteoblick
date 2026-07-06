@@ -48,12 +48,12 @@ test.describe('Weather API', () => {
     }
   });
 
-  test('GET /health returns healthy status', async ({ request }) => {
-    const response = await request.get('/health');
+  test('GET /api/debug returns debug info', async ({ request }) => {
+    const response = await request.get('/api/debug');
 
     expect(response.ok()).toBeTruthy();
 
     const data = await response.json();
-    expect(data).toHaveProperty('status', 'healthy');
+    expect(data).toHaveProperty('backend');
   });
 });
