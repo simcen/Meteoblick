@@ -235,19 +235,20 @@ export default function HomeScreen() {
                   </View>
                   <View style={styles.weatherRow}>
                     <Text style={styles.weatherLabel}>Temperatur IST</Text>
-                    <Text style={styles.weatherValue}>{weatherData.temperatureActual.toFixed(1)}°C</Text>
+                    <Text style={styles.weatherValue}>{weatherData.temperatureActual?.toFixed(1) ?? '--'}°C</Text>
                   </View>
                   <View style={styles.weatherRow}>
                     <Text style={styles.weatherLabel}>Temperatur Prognose</Text>
-                    <Text style={styles.weatherValue}>{weatherData.temperatureForecast.toFixed(1)}°C</Text>
+                    <Text style={styles.weatherValue}>{weatherData.temperatureForecast?.toFixed(1) ?? '--'}°C</Text>
                   </View>
                   <View style={[styles.weatherRow, styles.weatherRowLast]}>
                     <Text style={styles.weatherLabel}>Niederschlag</Text>
                     <Text style={styles.weatherValue}>{weatherData.precipitation.toFixed(1)} mm</Text>
                   </View>
                   <Text style={styles.weatherTimestamp}>
-                    IST: {new Date(weatherData.timestampActual).toLocaleString('de-CH')}{'\n'}
-                    Prognose: {new Date(weatherData.timestampForecast).toLocaleString('de-CH')}
+                    {weatherData.timestampActual && `IST: ${new Date(weatherData.timestampActual).toLocaleString('de-CH')}`}
+                    {weatherData.timestampActual && weatherData.timestampForecast && '\n'}
+                    {weatherData.timestampForecast && `Prognose: ${new Date(weatherData.timestampForecast).toLocaleString('de-CH')}`}
                   </Text>
                 </View>
               )}

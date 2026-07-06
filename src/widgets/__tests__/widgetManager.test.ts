@@ -18,7 +18,8 @@ describe('widgetManager', () => {
   describe('updateWidget', () => {
     const mockWidgetProps = {
       locationName: 'Frauenkappelen',
-      temperature: 22.5,
+      temperatureActual: 22.5,
+      temperatureForecast: 23.0,
       symbolCode: 3,
       precipitation: 0.2,
       buildNumber: '260703-1400',
@@ -28,7 +29,14 @@ describe('widgetManager', () => {
       await updateWidget(mockWidgetProps);
 
       expect(meteoblickWidget.updateSnapshot).toHaveBeenCalledWith(
-        mockWidgetProps
+        expect.objectContaining({
+          locationName: 'Frauenkappelen',
+          temperatureActual: 22.5,
+          temperatureForecast: 23.0,
+          symbolCode: 3,
+          precipitation: 0.2,
+          buildNumber: '260703-1400',
+        })
       );
       expect(meteoblickWidget.updateSnapshot).toHaveBeenCalledTimes(1);
     });
@@ -36,7 +44,8 @@ describe('widgetManager', () => {
     it('should handle all widget props types correctly', async () => {
       const propsWithEdgeCases = {
         locationName: 'Test Location With Spaces & Special Chars',
-        temperature: -5.5,
+        temperatureActual: -5.5,
+        temperatureForecast: -4.0,
         symbolCode: 15,
         precipitation: 0,
         buildNumber: 'dev',
@@ -45,7 +54,14 @@ describe('widgetManager', () => {
       await updateWidget(propsWithEdgeCases);
 
       expect(meteoblickWidget.updateSnapshot).toHaveBeenCalledWith(
-        propsWithEdgeCases
+        expect.objectContaining({
+          locationName: 'Test Location With Spaces & Special Chars',
+          temperatureActual: -5.5,
+          temperatureForecast: -4.0,
+          symbolCode: 15,
+          precipitation: 0,
+          buildNumber: 'dev',
+        })
       );
     });
 
@@ -77,13 +93,17 @@ describe('widgetManager', () => {
     it('should update with negative temperature', async () => {
       const propsWithNegativeTemp = {
         ...mockWidgetProps,
-        temperature: -10.5,
+        temperatureActual: -10.5,
+        temperatureForecast: -9.0,
       };
 
       await updateWidget(propsWithNegativeTemp);
 
       expect(meteoblickWidget.updateSnapshot).toHaveBeenCalledWith(
-        expect.objectContaining({ temperature: -10.5 })
+        expect.objectContaining({
+          temperatureActual: -10.5,
+          temperatureForecast: -9.0
+        })
       );
     });
   });

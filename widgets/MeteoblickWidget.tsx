@@ -11,8 +11,8 @@ import { createWidget, type WidgetEnvironment } from 'expo-widgets';
 
 interface WeatherProps {
   locationName: string;
-  temperatureActual: number;       // IST Temperatur (letzte vergangene Stunde)
-  temperatureForecast: number;     // Prognose Temperatur (nächste zukünftige Stunde)
+  temperatureActual?: number;       // IST Temperatur (letzte vergangene Stunde)
+  temperatureForecast?: number;     // Prognose Temperatur (nächste zukünftige Stunde)
   symbolCode: number;
   precipitation: number;
   buildNumber: string;
@@ -153,7 +153,7 @@ const MeteoblickWidget = (
         {/* Temperature (IST) */}
         <HStack spacing={2}>
           <Text modifiers={[font({ size: tempFontSize, weight: 'bold' }), foregroundStyle('#FFFFFF')]}>
-            {props.temperatureActual?.toFixed(1) || '--'}
+            {(props.temperatureActual !== undefined && props.temperatureActual !== null) ? props.temperatureActual.toFixed(1) : '--'}
           </Text>
           <Text modifiers={[font({ size: unitFontSize, weight: 'medium' }), foregroundStyle('#FFFFFF')]}>
             °C

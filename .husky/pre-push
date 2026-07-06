@@ -1,0 +1,11 @@
+#!/bin/sh
+
+echo "🧪 Running full test suite before push..."
+
+# Run all tests (frontend + backend + e2e)
+pnpm test:all || {
+  echo "❌ Tests failed - push aborted"
+  exit 1
+}
+
+echo "✅ All tests passed - proceeding with push"

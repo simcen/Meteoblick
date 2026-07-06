@@ -9,6 +9,9 @@
     "build": "tsc && echo 'Build successful'",
     "start": "NODE_OPTIONS='--dns-result-order=ipv4first' node dist/index.js",
     "sync": "NODE_OPTIONS='--dns-result-order=ipv4first' tsx src/cron/sync-weather.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "heroku-postbuild": "pnpm build"
   },
   "keywords": [
@@ -35,8 +38,10 @@
     "@types/node-cron": "^3.0.11",
     "@types/papaparse": "^5.3.15",
     "@types/pg": "^8.11.10",
+    "@vitest/ui": "^4.1.9",
     "tsx": "4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.9"
   },
   "engines": {
     "node": "24.18",

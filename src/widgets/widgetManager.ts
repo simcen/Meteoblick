@@ -18,8 +18,8 @@ import { APP_GROUP_ID, WIDGET_LAST_REFRESH_KEY } from '../constants';
 // Widget props type
 export interface WidgetProps {
   locationName: string;
-  temperatureActual: number;      // IST Temperatur (letzte vergangene Stunde)
-  temperatureForecast: number;    // Prognose Temperatur (nächste zukünftige Stunde)
+  temperatureActual?: number;      // IST Temperatur (letzte vergangene Stunde)
+  temperatureForecast?: number;    // Prognose Temperatur (nächste zukünftige Stunde)
   symbolCode: number;
   precipitation: number;
   buildNumber: string;

@@ -12,10 +12,12 @@ describe('MeteoSwissAPI', () => {
     const mockBackendResponse = {
       pointId: '1',
       locationName: 'Frauenkappelen',
-      temperature: 22.5,
+      temperatureActual: 22.5,
+      temperatureForecast: 23.0,
       symbolCode: 3,
       precipitation: 0.2,
-      timestamp: '2026-07-03T12:00:00Z',
+      timestampActual: '2026-07-03T11:00:00Z',
+      timestampForecast: '2026-07-03T12:00:00Z',
       latitude: 46.9756,
       longitude: 7.3136,
     };
@@ -29,10 +31,12 @@ describe('MeteoSwissAPI', () => {
       const result = await MeteoSwissAPI.fetchWeatherData('1');
 
       expect(result).toEqual({
-        temperature: 22.5,
+        temperatureActual: 22.5,
+        temperatureForecast: 23.0,
         symbolCode: 3,
         precipitation: 0.2,
-        timestamp: '2026-07-03T12:00:00Z',
+        timestampActual: '2026-07-03T11:00:00Z',
+        timestampForecast: '2026-07-03T12:00:00Z',
         location: '1',
         locationName: 'Frauenkappelen',
       });

@@ -1,0 +1,17 @@
+#!/bin/sh
+
+echo "🧪 Running tests before commit..."
+
+# Run frontend tests
+pnpm test --passWithNoTests || {
+  echo "❌ Frontend tests failed"
+  exit 1
+}
+
+# Run backend tests
+cd backend && pnpm test || {
+  echo "❌ Backend tests failed"
+  exit 1
+}
+
+echo "✅ All tests passed"
