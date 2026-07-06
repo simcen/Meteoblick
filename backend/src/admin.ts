@@ -50,6 +50,14 @@ const triggerSyncRoute = createRoute({
       },
       description: 'Forbidden - invalid admin token',
     },
+    500: {
+      content: {
+        'application/json': {
+          schema: ErrorSchema,
+        },
+      },
+      description: 'Internal server error - sync failed',
+    },
     503: {
       content: {
         'application/json': {

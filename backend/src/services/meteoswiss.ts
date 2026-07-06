@@ -98,7 +98,7 @@ export async function fetchWeatherFromMeteoSwiss(): Promise<WeatherData[]> {
       throw new Error(`STAC API returned ${itemsResponse.status}`);
     }
 
-    const itemsData: StacItemsResponse = await itemsResponse.json();
+    const itemsData = await itemsResponse.json() as StacItemsResponse;
     if (!itemsData.features || itemsData.features.length === 0) {
       throw new Error('No STAC items found');
     }

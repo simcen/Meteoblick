@@ -46,16 +46,6 @@ app.doc('/openapi', {
       description: process.env.NODE_ENV === 'production' ? 'Production' : 'Development',
     },
   ],
-  components: {
-    securitySchemes: {
-      bearerAuth: {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'token',
-        description: 'Admin token for protected endpoints (set via ADMIN_TOKEN env variable)',
-      },
-    },
-  },
 });
 
 app.get(

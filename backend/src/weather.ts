@@ -57,27 +57,7 @@ export const weatherRouter = new OpenAPIHono();
 weatherRouter.openapi(getWeatherRoute, async (c) => {
   const { pointId } = c.req.valid('param');
 
-  let data = await db.getWeatherWithPOI(pointId);
-
-  // If no data in cache, fetch from MeteoSwiss and cache it
-  if (!data) {
-    console.log(`⚠️ No cached weather for POI ${pointId}, fetching from MeteoSwiss...`);
-
-    try {
-      const meteoswiss = await import('../services/meteoswiss.js');
-      const weatherData = await meteoswiss.fetchWeatherForPOI(pointId);
-
-      if (weatherData) {
-        // Cache it in DB
-        await db.saveWeatherData(weatherData);
-
-        // Fetch again from DB to get POI name
-        data = await db.getWeatherWithPOI(pointId);
-      }
-    } catch (error) {
-      console.error(`Failed to fetch weather for POI ${pointId}:`, error);
-    }
-  }
+  const data = await db.getWeatherWithPOI(pointId);
 
   if (!data) {
     return c.json({ error: 'NOT_FOUND', message: 'Weather data not found for this POI' }, 404);
