@@ -5,7 +5,7 @@ export const LAST_FETCH_KEY = 'meteoblick_last_fetch';
 export const WIDGET_LAST_REFRESH_KEY = 'meteoblick_widget_last_refresh';
 
 // Build number (update before each release)
-export const BUILD_NUMBER = '260706-1420';
+export const BUILD_NUMBER = '260706-1555';
 
 // API Configuration
 // Simulator: localhost maps to host machine

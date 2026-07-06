@@ -30,19 +30,28 @@ fi
 
 echo "📦 Archive: $LATEST_ARCHIVE"
 
-# Export archive (if not already)
+# Always export fresh from latest archive
 EXPORT_DIR="$HOME/Library/Developer/Xcode/Archives/export"
 IPA_PATH="$EXPORT_DIR/Meteoblick.ipa"
 
-if [ ! -f "$IPA_PATH" ]; then
-  echo "📦 Exporting archive..."
-  mkdir -p "$EXPORT_DIR"
+echo "📦 Exporting archive..."
+rm -rf "$EXPORT_DIR"
+mkdir -p "$EXPORT_DIR"
 
-  xcodebuild -exportArchive \
-    -archivePath "$LATEST_ARCHIVE" \
-    -exportPath "$EXPORT_DIR" \
-    -exportOptionsPlist "ios/ExportOptions.plist"
-fi
+xcodebuild -exportArchive \
+  -archivePath "$LATEST_ARCHIVE" \
+  -exportPath "$EXPORT_DIR" \
+  -exportOptionsPlist "ios/ExportOptions.plist" || {
+    echo "❌ Export failed. Common issues:"
+    echo "   - Provisioning profile missing"
+    echo "   - Wrong team ID"
+    echo "   - Try: open Xcode → Fix signing → Try again"
+    exit 1
+  }
+
+# Verify build number
+IPA_BUNDLE_VERSION=$(plutil -extract CFBundleVersion raw "$EXPORT_DIR/Meteoblick.app/Info.plist" 2>/dev/null)
+echo "📋 IPA Build Number: $IPA_BUNDLE_VERSION"
 
 echo "📤 Uploading to App Store Connect..."
 

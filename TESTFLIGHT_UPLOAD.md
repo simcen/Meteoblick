@@ -14,7 +14,7 @@
 
 ```bash
 security add-generic-password \
-  -a "sbaenziger@gmail.com" \
+  -a "simon.balz@mac.com" \
   -s "AC_PASSWORD" \
   -w "DEIN-APP-SPEZIFISCHES-PASSWORT"
 ```
