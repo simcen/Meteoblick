@@ -1,2 +1,2 @@
-release: ./node_modules/.bin/prisma migrate deploy
+release: pnpm prisma migrate deploy
 web: pnpm start
