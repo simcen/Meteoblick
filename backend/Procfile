@@ -1,2 +1,2 @@
-release: pnpm prisma migrate deploy
+release: pnpm prisma:migrate
 web: pnpm start
