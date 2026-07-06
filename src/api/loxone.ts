@@ -5,12 +5,24 @@
  * - Auto-detection of local vs cloud connection
  * - Structure File parsing for sensor discovery
  * - Temperature sensor value reading
- * - Basic HTTP authentication
+ * - Token-based authentication (SHA-256 of API key + password)
+ *
+ * Auth strategy:
+ * - Local: HTTP Basic Auth via Authorization header
+ * - Cloud: HTTP Basic Auth via URL userinfo (HTTPS reverse proxy at
+ *   connect.loxonecloud.com does not forward Authorization headers)
+ * - After initial /jdev/cfg/apiKey exchange, the password is replaced
+ *   by a SHA-256 hash, so it only travels over the wire once.
  *
  * Reference:
  * - /Users/siba5/Development/_projects/Inside-The-Loxone-Miniserver/
  * - sample/CommunicatingWithMiniserver.pdf
  */
+
+import * as Crypto from 'expo-crypto';
+import { API_BASE_URL } from '../constants';
+
+const LOXONE_PROXY_BASE = `${API_BASE_URL}/api/loxone`;
 
 export interface LoxoneConfig {
   cloudAddress: string;        // Serial Number (SNR), e.g. "504F94A1874F"
@@ -85,9 +97,25 @@ export interface LoxoneValueResponse {
   };
 }
 
+export interface LoxoneApiKeyResponse {
+  LL: {
+    value: string;
+    Code: string;
+  };
+}
+
+const CLOUD_PREFIX = 'https://connect.loxonecloud.com/';
+const TEMPERATURE_TIMEOUT_MS = 15000;
+const STRUCTURE_FILE_TIMEOUT_MS = 90000;
+const DNS_TIMEOUT_MS = 10000;
+const REACHABILITY_TIMEOUT_MS = 3000;
+const AUTH_HEADER_TIMEOUT_MS = 10000;
+
 export class LoxoneAPI {
   private config: LoxoneConfig;
   private connection: LoxoneConnection | null = null;
+  private keyHash: string | null = null;
+  private authInFlight: Promise<string> | null = null;
 
   constructor(config: LoxoneConfig) {
     this.config = config;
@@ -109,7 +137,7 @@ export class LoxoneAPI {
       const localURL = `http://${this.config.localIP}`;
       console.log('[Loxone] Using manual local IP:', localURL);
 
-      const isReachable = await this.testConnection(localURL, 3000);
+      const isReachable = await this.testReachable(localURL, REACHABILITY_TIMEOUT_MS);
 
       if (isReachable) {
         this.connection = { baseURL: localURL, type: 'local' };
@@ -134,7 +162,7 @@ export class LoxoneAPI {
       const localURL = `http://${dnsInfo.localIP}:${dnsInfo.localPort || 80}`;
       console.log('[Loxone] Testing local connection:', localURL);
 
-      const isLocalReachable = await this.testConnection(localURL, 3000);
+      const isLocalReachable = await this.testReachable(localURL, REACHABILITY_TIMEOUT_MS);
 
       if (isLocalReachable) {
         this.connection = { baseURL: localURL, type: 'local' };
@@ -148,25 +176,28 @@ export class LoxoneAPI {
     }
 
     // 3. Fallback to cloud
-    const cloudURL = `https://connect.loxonecloud.com/${this.config.cloudAddress}`;
+    const cloudURL = `${CLOUD_PREFIX}${this.config.cloudAddress}`;
     this.connection = { baseURL: cloudURL, type: 'cloud' };
     console.log('☁️ [Loxone] Using cloud connection:', cloudURL);
     return this.connection;
   }
 
   /**
-   * Query Loxone Cloud DNS Service for Miniserver IP
+   * Query Loxone Cloud DNS Service for Miniserver IP (via backend proxy)
    */
   private async queryDNS(): Promise<LoxoneDNSResponse> {
-    const url = `https://dns.loxonecloud.com/?getip&snr=${this.config.cloudAddress}&json=true`;
+    const url = `${LOXONE_PROXY_BASE}/?getip&snr=${this.config.cloudAddress}&json=true`;
 
-    console.log('[Loxone] DNS query:', url);
+    console.log('[Loxone] DNS query via proxy:', url);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), DNS_TIMEOUT_MS);
 
     try {
-      const response = await fetch(url, { signal: controller.signal });
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: this.getProxyHeaders('https://dns.loxonecloud.com'),
+      });
       clearTimeout(timeoutId);
 
       if (!response.ok) {
@@ -193,27 +224,34 @@ export class LoxoneAPI {
   }
 
   /**
-   * Test if a connection is reachable (with timeout)
+   * Network-level reachability check (via backend proxy). Any HTTP response
+   * (incl. 401) counts as reachable; only timeouts / network errors mean unreachable.
    */
-  private async testConnection(baseURL: string, timeout: number): Promise<boolean> {
+  private async testReachable(baseURL: string, timeout: number): Promise<boolean> {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-      // Try to reach /jdev/cfg/apiKey (lightweight endpoint)
-      await fetch(`${baseURL}/jdev/cfg/apiKey`, {
+      const response = await fetch(`${LOXONE_PROXY_BASE}/jdev/cfg/apiKey`, {
         signal: controller.signal,
-        headers: {
-          Authorization: this.getAuthHeader(),
-        },
+        headers: this.getProxyHeaders(baseURL),
       });
-
       clearTimeout(timeoutId);
-      return true;
-    } catch (error) {
-      // Timeout or network error = not reachable
+      return response.status > 0;
+    } catch {
       return false;
     }
+  }
+
+  /**
+   * Builds the standard proxy headers for a given base URL. Uses the raw
+   * password for unauthenticated probes (DNS query, reachability check);
+   * the token hash is used for authenticated requests via buildRequest().
+   */
+  private getProxyHeaders(baseURL: string): HeadersInit {
+    return {
+      'X-Loxone-BaseURL': baseURL,
+      'X-Loxone-Auth': `Basic ${btoa(`${this.config.username}:${this.config.password}`)}`,
+    };
   }
 
   /**
@@ -224,24 +262,23 @@ export class LoxoneAPI {
    */
   async getStructureFile(): Promise<LoxoneStructureFile> {
     const conn = await this.getConnection();
+    await this.ensureAuth();
 
     console.log('[Loxone] Fetching Structure File from:', conn.baseURL);
     console.log('[Loxone] This may take 30-60 seconds for large projects...');
 
-    // Structure File can be very large - use 90s timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       console.log('[Loxone] Structure File fetch timeout after 90s');
       controller.abort();
-    }, 90000);
+    }, STRUCTURE_FILE_TIMEOUT_MS);
 
     try {
       const startTime = Date.now();
 
-      const response = await fetch(`${conn.baseURL}/data/LoxAPP3.json`, {
-        headers: {
-          Authorization: this.getAuthHeader(),
-        },
+      const req = this.buildRequest(conn.baseURL, '/data/LoxAPP3.json');
+      const response = await fetch(req.url, {
+        headers: req.headers,
         signal: controller.signal,
       });
 
@@ -318,42 +355,149 @@ export class LoxoneAPI {
    */
   async getTemperature(uuid: string): Promise<number> {
     const conn = await this.getConnection();
+    await this.ensureAuth();
 
-    const response = await fetch(`${conn.baseURL}/jdev/sps/io/${uuid}`, {
-      headers: {
-        Authorization: this.getAuthHeader(),
-      },
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TEMPERATURE_TIMEOUT_MS);
+
+    try {
+      const req = this.buildRequest(conn.baseURL, `/jdev/sps/io/${uuid}`);
+      const response = await fetch(req.url, {
+        headers: req.headers,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      // 401 on a token-authenticated request = API key rotated, re-auth and retry once.
+      if (response.status === 401 && this.keyHash) {
+        console.warn('[Loxone] 401 — API key likely rotated, re-authenticating');
+        this.keyHash = null;
+        await this.ensureAuth();
+        return this.getTemperature(uuid);
+      }
+
+      if (!response.ok) {
+        throw new Error(`Failed to read temperature: ${response.status}`);
+      }
+
+      const data: LoxoneValueResponse = await response.json();
+
+      const temperature = parseFloat(data.LL.value);
+
+      if (isNaN(temperature)) {
+        throw new Error(`Invalid temperature value: ${data.LL.value}`);
+      }
+
+      return temperature;
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch API key + compute SHA-256 hash of (apiKey + ":" + password).
+   * Cached for the session; re-fetched automatically on 401.
+   */
+  private async ensureAuth(): Promise<string> {
+    if (this.keyHash) return this.keyHash;
+    if (this.authInFlight) return this.authInFlight;
+
+    this.authInFlight = this.fetchAndHashKey().finally(() => {
+      this.authInFlight = null;
     });
 
-    if (!response.ok) {
-      throw new Error(`Failed to read temperature: ${response.status}`);
+    return this.authInFlight;
+  }
+
+  private async fetchAndHashKey(): Promise<string> {
+    const conn = await this.getConnection();
+
+    // First request to /jdev/cfg/apiKey uses the raw password
+    const initial = this.buildInitialRequest(conn.baseURL);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), AUTH_HEADER_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(initial.url, {
+        headers: initial.headers,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch API key: ${response.status}`);
+      }
+
+      const data: LoxoneApiKeyResponse = await response.json();
+      const apiKey = data.LL?.value;
+      if (!apiKey) {
+        throw new Error('Loxone API key missing in response');
+      }
+
+      const hash = await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
+        `${apiKey}:${this.config.password}`,
+      );
+
+      this.keyHash = hash;
+      console.log('[Loxone] Token authentication successful');
+      return hash;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      throw error;
     }
-
-    const data: LoxoneValueResponse = await response.json();
-
-    const temperature = parseFloat(data.LL.value);
-
-    if (isNaN(temperature)) {
-      throw new Error(`Invalid temperature value: ${data.LL.value}`);
-    }
-
-    return temperature;
   }
 
   /**
-   * Create Basic Auth header
+   * Build URL + headers for an authenticated request, using the cached token hash.
+   * All requests are routed through the backend proxy to bypass iOS-simulator
+   * PAC-proxy issues; the backend forwards them to the Miniserver.
    */
-  private getAuthHeader(): string {
-    const credentials = `${this.config.username}:${this.config.password}`;
-    const base64 = btoa(credentials);
-    return `Basic ${base64}`;
+  private buildRequest(baseURL: string, path: string): { url: string; headers: HeadersInit } {
+    if (!this.keyHash) {
+      throw new Error('Loxone: buildRequest called before ensureAuth');
+    }
+    return this.buildProxyRequest(baseURL, path, this.keyHash);
   }
 
   /**
-   * Clear cached connection (force re-detection)
+   * Like buildRequest, but uses the raw password. Only used for the very first
+   * /jdev/cfg/apiKey exchange — the password is never sent again after that.
+   */
+  private buildInitialRequest(
+    baseURL: string,
+  ): { url: string; headers: HeadersInit } {
+    return this.buildProxyRequest(baseURL, '/jdev/cfg/apiKey', this.config.password);
+  }
+
+  /**
+   * Routes an authenticated request through the backend Loxone proxy.
+   * Headers carry the target baseURL + Authorization; the proxy forwards as-is.
+   */
+  private buildProxyRequest(
+    baseURL: string,
+    path: string,
+    credential: string,
+  ): { url: string; headers: HeadersInit } {
+    const auth = `Basic ${btoa(`${this.config.username}:${credential}`)}`;
+    return {
+      url: `${LOXONE_PROXY_BASE}${path}`,
+      headers: {
+        'X-Loxone-BaseURL': baseURL,
+        'X-Loxone-Auth': auth,
+      },
+    };
+  }
+
+  /**
+   * Clear cached connection + auth (force re-detection and re-auth)
    */
   resetConnection(): void {
     this.connection = null;
+    this.keyHash = null;
+    this.authInFlight = null;
   }
 }
 
