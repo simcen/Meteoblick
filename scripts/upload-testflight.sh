@@ -1,40 +1,54 @@
 #!/bin/bash
 set -e
 
-# Check if API credentials are configured
-if [ -z "$APP_STORE_CONNECT_API_KEY_ID" ] || [ -z "$APP_STORE_CONNECT_API_ISSUER_ID" ]; then
-  echo "❌ App Store Connect API credentials not configured"
-  echo ""
-  echo "Setup instructions:"
-  echo "1. Go to https://appstoreconnect.apple.com/access/api"
-  echo "2. Create a new API Key with 'App Manager' role"
-  echo "3. Download the .p8 file and save it to: ~/.appstoreconnect/private_keys/"
-  echo "4. Add to your ~/.zshrc or ~/.bashrc:"
-  echo "   export APP_STORE_CONNECT_API_KEY_ID='YOUR_KEY_ID'"
-  echo "   export APP_STORE_CONNECT_API_ISSUER_ID='YOUR_ISSUER_ID'"
-  echo "   export APP_STORE_CONNECT_API_KEY_PATH='~/.appstoreconnect/private_keys/AuthKey_YOUR_KEY_ID.p8'"
-  echo ""
+# TestFlight Upload Script
+# Requires:
+# - App-specific password from https://appleid.apple.com/
+# - Set TESTFLIGHT_PASSWORD env var or use keychain
+
+PASSWORD_SOURCE="${TESTFLIGHT_PASSWORD:-@keychain:AC_PASSWORD}"
+
+echo "🚀 Uploading to TestFlight..."
+
+# Find latest archive in Xcode Organizer
+ARCHIVE_DATE=$(date +%Y-%m-%d)
+ARCHIVE_DIR="$HOME/Library/Developer/Xcode/Archives/$ARCHIVE_DATE"
+
+if [ ! -d "$ARCHIVE_DIR" ]; then
+  echo "❌ No archive directory found for $ARCHIVE_DATE"
+  echo "   Run: pnpm ios:archive"
   exit 1
 fi
 
-IPA_PATH="ios/build/TestFlight/Meteoblick.ipa"
+# Get latest archive
+LATEST_ARCHIVE=$(ls -td "$ARCHIVE_DIR"/Meteoblick*.xcarchive 2>/dev/null | head -1)
+
+if [ -z "$LATEST_ARCHIVE" ]; then
+  echo "❌ No Meteoblick archive found in $ARCHIVE_DIR"
+  exit 1
+fi
+
+echo "📦 Archive: $LATEST_ARCHIVE"
+
+# Export archive (if not already)
+EXPORT_DIR="$HOME/Library/Developer/Xcode/Archives/export"
+IPA_PATH="$EXPORT_DIR/Meteoblick.ipa"
 
 if [ ! -f "$IPA_PATH" ]; then
-  echo "❌ IPA not found at $IPA_PATH"
-  echo "Run 'pnpm ios:testflight' first to create the build"
-  exit 1
+  echo "📦 Exporting archive..."
+  mkdir -p "$EXPORT_DIR"
+
+  xcodebuild -exportArchive \
+    -archivePath "$LATEST_ARCHIVE" \
+    -exportPath "$EXPORT_DIR" \
+    -exportOptionsPlist "ios/ExportOptions.plist"
 fi
 
-echo "📤 Uploading to TestFlight..."
-echo "   IPA: $IPA_PATH"
+echo "📤 Uploading to App Store Connect..."
 
-# Use xcrun altool for upload
-xcrun altool --upload-app \
-  --type ios \
+xcrun altool --upload-app --type ios \
   --file "$IPA_PATH" \
-  --apiKey "$APP_STORE_CONNECT_API_KEY_ID" \
-  --apiIssuer "$APP_STORE_CONNECT_API_ISSUER_ID"
+  --username "${TESTFLIGHT_USERNAME:-simon.balz@mac.com}" \
+  --password "$PASSWORD_SOURCE"
 
-echo "✅ Upload complete!"
-echo "   Check App Store Connect for processing status"
-echo "   Processing usually takes 5-10 minutes"
+echo "✅ Upload complete! Check App Store Connect → TestFlight"
