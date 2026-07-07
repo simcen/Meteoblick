@@ -123,8 +123,8 @@ struct MeteoblickView: View {
                     .foregroundColor(.white)
             }
 
-            // Loxone Smart-Home (medium+ only, if available)
-            if let lxTemp = s.temperatureLoxone, !isSmall {
+            // Loxone Smart-Home (alle Grössen, wenn verfügbar)
+            if let lxTemp = s.temperatureLoxone {
                 HStack(spacing: 2) {
                     Text(s.temperatureLoxoneLabel)
                         .font(.system(size: 10))
@@ -180,7 +180,16 @@ struct MeteoblickWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: name, provider: MeteoblickProvider()) { entry in
             MeteoblickView(entry: entry)
-                .containerBackground(.fill.tertiary, for: .widget)
+                .containerBackground(for: .widget) {
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.345, green: 0.745, blue: 0.965), // #58BEF6
+                            Color(red: 0.200, green: 0.400, blue: 0.800), // #3366CC
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
         }
         .configurationDisplayName("Meteoblick")
         .description("Wetter für deinen Standort")
