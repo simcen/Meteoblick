@@ -152,8 +152,9 @@ export const SharedStorage = {
           APP_GROUP_ID,
         );
       } else {
-        // Toggle off → remove widget copy so the widget stops fetching.
-        await SharedGroupPreferences.removeItem(WIDGET_LOXONE_CONFIG_KEY, APP_GROUP_ID);
+        // Toggle off → clear widget copy so the widget stops fetching.
+        // react-native-shared-group-preferences has no removeItem; empty string signals disabled.
+        await SharedGroupPreferences.setItem(WIDGET_LOXONE_CONFIG_KEY, '', APP_GROUP_ID);
       }
       console.log('✅ Loxone config saved (app + widget mirror)');
     } catch (error) {
@@ -165,7 +166,7 @@ export const SharedStorage = {
   async deleteLoxoneConfig(): Promise<void> {
     try {
       await AsyncStorage.removeItem('loxone_config');
-      await SharedGroupPreferences.removeItem(WIDGET_LOXONE_CONFIG_KEY, APP_GROUP_ID);
+      await SharedGroupPreferences.setItem(WIDGET_LOXONE_CONFIG_KEY, '', APP_GROUP_ID);
       console.log('✅ Loxone config deleted (app + widget)');
     } catch (error) {
       console.error('Failed to delete Loxone config:', error);
