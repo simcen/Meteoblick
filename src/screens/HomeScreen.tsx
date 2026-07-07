@@ -4,41 +4,30 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { SharedStorage } from '../storage/SharedStorage';
 import { MeteoSwissAPI } from '../api/meteoswiss';
-import { LoxoneAPI } from '../api/loxone';
-import { updateWidget } from '../widgets/widgetManager';
 import { Button } from '../components/Button';
 import { Colors, Typography, Spacing, Layout, ComponentStyles } from '../constants/designSystem';
-import { BUILD_NUMBER } from '../constants';
-import type { WeatherData } from '../types/weather';
+import { useWeather } from '../providers/WeatherContext';
 import type { POI } from '../types/poi';
 
 export default function HomeScreen() {
   const [pointId, setPointId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [poiList, setPoiList] = useState<POI[]>([]);
   const [loadingPOIs, setLoadingPOIs] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [loxoneTemp, setLoxoneTemp] = useState<number | null>(null);
-  const [loxoneTimestamp, setLoxoneTimestamp] = useState<string | null>(null);
 
-  // Reload data every time the screen comes into focus
-  // This ensures fresh Loxone data after changing sensor in SmartHomeScreen
+  // Weather + Loxone state come from the shared context so the screen updates
+  // automatically when the foreground refresh interval fires.
+  const { weather: weatherData, loxoneTemp, loxoneTimestamp, isFetching: refreshing, refresh } = useWeather();
+
+  // Refresh weather + Loxone every time the screen comes into focus.
+  // The Context owns the actual fetch + state — we just kick it.
   useFocusEffect(
     useCallback(() => {
-      loadData();
-
-      // Refetch weather if POI is set
-      const refetch = async () => {
-        const storedPoi = await SharedStorage.getPointId();
-        if (storedPoi) {
-          await fetchWeatherData(storedPoi);
-        }
-      };
-      refetch();
-    }, [])
+      loadStoredPoi();
+      refresh();
+    }, [refresh])
   );
 
   useEffect(() => {
@@ -49,88 +38,11 @@ export default function HomeScreen() {
     }
   }, [searchQuery]);
 
-  const loadData = async () => {
+  const loadStoredPoi = async () => {
     const storedPoi = await SharedStorage.getPointId();
     if (storedPoi) {
       setPointId(storedPoi);
     }
-
-    const storedWeather = await SharedStorage.getWeatherData();
-    if (storedWeather) {
-      setWeatherData(storedWeather);
-    }
-
-    // Load cached Loxone data
-    const cachedLoxone = await SharedStorage.getLoxoneSensorData();
-    if (cachedLoxone) {
-      setLoxoneTemp(cachedLoxone.temperature);
-      setLoxoneTimestamp(cachedLoxone.timestamp);
-    }
-  };
-
-  const fetchWeatherData = async (poiId: string): Promise<WeatherData | null> => {
-    // 1. MeteoSwiss — independent of Loxone so backend downtime doesn't block Loxone updates.
-    let weather = await SharedStorage.getWeatherData(); // cache as fallback
-    try {
-      const fresh = await MeteoSwissAPI.fetchWeatherData(poiId);
-      await SharedStorage.setWeatherData(fresh);
-      weather = fresh;
-      setWeatherData(fresh);
-      console.log('[HomeScreen] MeteoSwiss fetched:', fresh.temperatureActual);
-    } catch (error) {
-      console.warn('[HomeScreen] MeteoSwiss fetch failed (continuing):', error);
-    }
-
-    // 2. Loxone (if configured) — independent of MeteoSwiss.
-    let newLoxoneTemp: number | null = null;
-    let newLoxoneTimestamp: string | null = null;
-
-    const loxoneConfig = await SharedStorage.getLoxoneConfig();
-    if (loxoneConfig?.enabled && loxoneConfig.temperatureSensorUUID) {
-      try {
-        const api = new LoxoneAPI(loxoneConfig);
-        const temp = await api.getTemperature(loxoneConfig.temperatureSensorUUID);
-        newLoxoneTemp = temp;
-        newLoxoneTimestamp = new Date().toISOString();
-        await SharedStorage.setLoxoneSensorData({ temperature: temp, timestamp: newLoxoneTimestamp });
-        console.log('[HomeScreen] Loxone temperature:', temp);
-      } catch (err) {
-        console.warn('[HomeScreen] Loxone fetch failed:', err);
-        const cached = await SharedStorage.getLoxoneSensorData();
-        if (cached) {
-          newLoxoneTemp = cached.temperature;
-          newLoxoneTimestamp = cached.timestamp;
-        }
-      }
-    }
-
-    // Update local Loxone state
-    setLoxoneTemp(newLoxoneTemp);
-    setLoxoneTimestamp(newLoxoneTimestamp);
-
-    // 3. Update widget — only if we have any weather data (fresh or cached).
-    if (weather) {
-      try {
-        await updateWidget({
-          locationName: weather.locationName,
-          temperatureActual: weather.temperatureActual,
-          temperatureForecast: weather.temperatureForecast,
-          temperatureLoxone: newLoxoneTemp ?? undefined,
-          symbolCode: weather.symbolCode,
-          precipitation: weather.precipitation,
-          buildNumber: BUILD_NUMBER,
-          timestampActual: weather.timestampActual,
-          timestampForecast: weather.timestampForecast,
-          timestampLoxone: newLoxoneTimestamp ?? undefined,
-        });
-      } catch (widgetError) {
-        console.error('[HomeScreen] Widget update failed:', widgetError);
-      }
-    } else {
-      console.log('[HomeScreen] No weather data available (no fresh, no cache) — skipping widget update');
-    }
-
-    return weather;
   };
 
   const searchPOIs = async () => {
@@ -154,17 +66,7 @@ export default function HomeScreen() {
   console.log('Show suggestions:', showSuggestions);
 
   const onRefresh = async () => {
-    setRefreshing(true);
-    try {
-      const storedPoi = await SharedStorage.getPointId();
-      if (storedPoi) {
-        await fetchWeatherData(storedPoi);
-      }
-    } catch (error) {
-      console.error('Refresh failed:', error);
-    } finally {
-      setRefreshing(false);
-    }
+    await refresh();
   };
 
   const handlePOISelect = (poi: POI) => {
@@ -193,22 +95,8 @@ export default function HomeScreen() {
       await SharedStorage.setPointId(selectedPOI.id);
       setPointId(selectedPOI.id);
 
-      // Fetch weather data from API
-      const weather = await fetchWeatherData(selectedPOI.id);
-
-      // Update widget with new data
-      if (weather) {
-        await updateWidget({
-          locationName: weather.locationName,
-          temperatureActual: weather.temperatureActual,
-          temperatureForecast: weather.temperatureForecast,
-          symbolCode: weather.symbolCode,
-          precipitation: weather.precipitation,
-          buildNumber: BUILD_NUMBER,
-          timestampActual: weather.timestampActual,
-          timestampForecast: weather.timestampForecast,
-        });
-      }
+      // Trigger a fresh fetch via the shared context (also updates the widget).
+      await refresh();
 
       Alert.alert(
         'Gespeichert',
