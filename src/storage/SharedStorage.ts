@@ -1,6 +1,6 @@
 import SharedGroupPreferences from 'react-native-shared-group-preferences';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { APP_GROUP_ID, POI_STORAGE_KEY, WEATHER_DATA_KEY, WIDGET_LAST_REFRESH_KEY } from '../constants';
+import { APP_GROUP_ID, POI_STORAGE_KEY, WEATHER_DATA_KEY, WIDGET_LAST_REFRESH_KEY, WIDGET_LOXONE_CONFIG_KEY, WIDGET_LOXONE_SENSOR_DATA_KEY } from '../constants';
 import type { WeatherData } from '../types/weather';
 import type { POI } from '../types/poi';
 
@@ -134,8 +134,28 @@ export const SharedStorage = {
   }): Promise<void> {
     try {
       const json = JSON.stringify(config);
+      // AsyncStorage: source of truth for the host app.
       await AsyncStorage.setItem('loxone_config', json);
-      console.log('✅ Loxone config saved');
+      // App Group: mirror so the iOS Widget Extension can read it.
+      // Excludes `enabled` since the widget shouldn't toggle on/off via
+      // its own logic — that's a user-facing toggle only.
+      if (config.enabled) {
+        const widgetConfig = {
+          cloudAddress: config.cloudAddress,
+          username: config.username,
+          password: config.password,
+          temperatureSensorUUID: config.temperatureSensorUUID,
+        };
+        await SharedGroupPreferences.setItem(
+          WIDGET_LOXONE_CONFIG_KEY,
+          JSON.stringify(widgetConfig),
+          APP_GROUP_ID,
+        );
+      } else {
+        // Toggle off → remove widget copy so the widget stops fetching.
+        await SharedGroupPreferences.removeItem(WIDGET_LOXONE_CONFIG_KEY, APP_GROUP_ID);
+      }
+      console.log('✅ Loxone config saved (app + widget mirror)');
     } catch (error) {
       console.error('Failed to save Loxone config:', error);
       throw error;
@@ -145,7 +165,8 @@ export const SharedStorage = {
   async deleteLoxoneConfig(): Promise<void> {
     try {
       await AsyncStorage.removeItem('loxone_config');
-      console.log('✅ Loxone config deleted');
+      await SharedGroupPreferences.removeItem(WIDGET_LOXONE_CONFIG_KEY, APP_GROUP_ID);
+      console.log('✅ Loxone config deleted (app + widget)');
     } catch (error) {
       console.error('Failed to delete Loxone config:', error);
       throw error;
@@ -154,7 +175,10 @@ export const SharedStorage = {
 
   async getLoxoneSensorData(): Promise<{ temperature: number; timestamp: string } | null> {
     try {
-      const json = await SharedGroupPreferences.getItem('loxone_sensor_data', APP_GROUP_ID);
+      const json = await SharedGroupPreferences.getItem(
+        WIDGET_LOXONE_SENSOR_DATA_KEY,
+        APP_GROUP_ID,
+      );
       if (!json) return null;
       return JSON.parse(json);
     } catch (error) {
@@ -165,10 +189,36 @@ export const SharedStorage = {
   async setLoxoneSensorData(data: { temperature: number; timestamp: string }): Promise<void> {
     try {
       const json = JSON.stringify(data);
-      await SharedGroupPreferences.setItem('loxone_sensor_data', json, APP_GROUP_ID);
+      await SharedGroupPreferences.setItem(WIDGET_LOXONE_SENSOR_DATA_KEY, json, APP_GROUP_ID);
     } catch (error) {
       console.error('Failed to save Loxone sensor data:', error);
       throw error;
+    }
+  },
+
+  /**
+   * Widget-readable Loxone config. The host app writes this on every
+   * config change so the iOS Widget Extension can fetch the Loxone
+   * temperature independently of the host app.
+   *
+   * Only populated when Loxone is enabled — see setLoxoneConfig above.
+   */
+  async getLoxoneConfigForWidget(): Promise<{
+    cloudAddress: string;
+    username: string;
+    password: string;
+    temperatureSensorUUID?: string;
+  } | null> {
+    try {
+      const json = await SharedGroupPreferences.getItem(
+        WIDGET_LOXONE_CONFIG_KEY,
+        APP_GROUP_ID,
+      );
+      if (!json) return null;
+      return JSON.parse(json);
+    } catch (error) {
+      console.error('Failed to read widget Loxone config:', error);
+      return null;
     }
   },
 };

@@ -8,12 +8,110 @@
  * foreground refresh completes.
  */
 import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from 'react';
+import SharedGroupPreferences from 'react-native-shared-group-preferences';
 import { SharedStorage } from '../storage/SharedStorage';
 import { MeteoSwissAPI } from '../api/meteoswiss';
 import { LoxoneAPI } from '../api/loxone';
-import { updateWidget } from '../widgets/widgetManager';
-import { BUILD_NUMBER } from '../constants';
+import { updateWidget, fetchAndWriteWidgetTimeline } from '../widgets/widgetManager';
+import { APP_GROUP_ID, BUILD_NUMBER, WIDGET_WEATHER_SNAPSHOT_KEY } from '../constants';
 import type { WeatherData } from '../types/weather';
+
+/**
+ * Weather symbol mapping (MeteoSwiss code → emoji).
+ * Single source of truth — the iOS Widget reads these strings directly,
+ * so all visual logic lives in JS and Swift just renders.
+ */
+function getWeatherSymbol(code: number): string {
+  switch (code) {
+    case 1:
+      return '☀️';
+    case 2:
+      return '🌤️';
+    case 3:
+    case 4:
+      return '⛅';
+    case 5:
+    case 6:
+      return '☁️';
+    case 7:
+    case 8:
+    case 9:
+      return '🌧️';
+    case 10:
+    case 11:
+    case 12:
+      return '⛈️';
+    case 13:
+    case 14:
+    case 15:
+      return '🌨️';
+    default:
+      return '🌡️';
+  }
+}
+
+function formatTime(iso?: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
+export interface WidgetSnapshot {
+  locationName: string;
+  weatherSymbol: string;
+  weatherSymbolSmall: string;
+  temperatureActual: string;
+  temperatureUnit: string;
+  temperatureLoxone: string | null;
+  temperatureLoxoneLabel: string;
+  precipitation: string;
+  precipitationUnit: string;
+  precipitationLabel: string;
+  timestampActual: string;
+  refreshedAt: string;
+  buildNumber: string;
+}
+
+function buildWidgetSnapshot(
+  weather: WeatherData | null,
+  loxoneTemp: number | null,
+  refreshedAt: Date,
+): WidgetSnapshot {
+  if (!weather) {
+    return {
+      locationName: 'Keine Daten',
+      weatherSymbol: '🌡️',
+      weatherSymbolSmall: '☁️',
+      temperatureActual: '--',
+      temperatureUnit: '°C',
+      temperatureLoxone: null,
+      temperatureLoxoneLabel: '🏠',
+      precipitation: '0.0',
+      precipitationUnit: 'mm',
+      precipitationLabel: '💧',
+      timestampActual: '',
+      refreshedAt: formatTime(refreshedAt.toISOString()),
+      buildNumber: BUILD_NUMBER,
+    };
+  }
+  return {
+    locationName: weather.locationName,
+    weatherSymbol: getWeatherSymbol(weather.symbolCode),
+    weatherSymbolSmall: '☁️',
+    temperatureActual: weather.temperatureActual.toFixed(1),
+    temperatureUnit: '°C',
+    temperatureLoxone: loxoneTemp != null ? loxoneTemp.toFixed(1) : null,
+    temperatureLoxoneLabel: '🏠',
+    precipitation: weather.precipitation.toFixed(1),
+    precipitationUnit: 'mm',
+    precipitationLabel: '💧',
+    timestampActual: formatTime(weather.timestampActual),
+    refreshedAt: formatTime(refreshedAt.toISOString()),
+    buildNumber: BUILD_NUMBER,
+  };
+}
 
 interface WeatherState {
   weather: WeatherData | null;
@@ -136,6 +234,23 @@ export function WeatherProvider({ children }: WeatherProviderProps) {
           timestampForecast: weather.timestampForecast,
           timestampLoxone: loxoneTimestamp ?? undefined,
         });
+
+        // Write the JS-computed layout snapshot to the App Group so the
+        // Widget can render it without doing its own symbol-mapping or
+        // string formatting. Swift just reads and displays.
+        const snapshot = buildWidgetSnapshot(weather, loxoneTemp, fetchCompletedAt);
+        await SharedGroupPreferences.setItem(
+          WIDGET_WEATHER_SNAPSHOT_KEY,
+          JSON.stringify(snapshot),
+          APP_GROUP_ID,
+        );
+        console.log('[Weather] Widget snapshot written:', snapshot.locationName, snapshot.temperatureActual);
+
+        // Also write the consolidated widget snapshot via the backend
+        // timeline endpoint — this is the source of truth for the Widget
+        // Extension (it can read it from App Group without depending on
+        // the host app's JS-side fetch results).
+        await fetchAndWriteWidgetTimeline();
       } catch (error) {
         console.error('[Weather] Widget update failed:', error);
       }

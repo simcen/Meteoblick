@@ -6,8 +6,14 @@ export const WEATHER_DATA_KEY = 'meteoblick_weather_data';
 export const LAST_FETCH_KEY = 'meteoblick_last_fetch';
 export const WIDGET_LAST_REFRESH_KEY = 'meteoblick_widget_last_refresh';
 
+// App Group keys for the iOS Widget Extension. The widget reads from
+// these directly via SharedGroupPreferences (Swift UserDefaults suite).
+export const WIDGET_LOXONE_CONFIG_KEY = 'loxone_config_widget';
+export const WIDGET_LOXONE_SENSOR_DATA_KEY = 'loxone_sensor_data';
+export const WIDGET_WEATHER_SNAPSHOT_KEY = 'meteoblick_widget_weather_snapshot';
+
 // Build number (update before each release)
-export const BUILD_NUMBER = '260707-0709';
+export const BUILD_NUMBER = '260707-1113';
 
 // API Configuration
 // In dev mode with iOS simulator + corporate PAC proxy, CFNetwork cancels

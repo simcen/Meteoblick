@@ -60,6 +60,8 @@
     "test:backend": "cd backend && pnpm test",
     "test:all": "pnpm test && pnpm test:backend && pnpm test:e2e",
     "heroku:push": "./scripts/deploy-heroku.sh",
+    "prebuild": "expo prebuild",
+    "postprebuild": "node plugins/widget-custom/patch.js",
     "prepare": "husky"
   },
   "private": true,

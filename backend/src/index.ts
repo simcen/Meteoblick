@@ -12,6 +12,7 @@ import { poisRouter } from './pois.js';
 import { adminRouter } from './admin.js';
 import { debugRouter } from './debug.js';
 import { loxoneRouter } from './loxone.js';
+import { widgetRouter } from './widget.js';
 
 const app = new OpenAPIHono();
 
@@ -19,6 +20,7 @@ app.route('/api', weatherRouter);
 app.route('/api', poisRouter);
 app.route('/api', adminRouter);
 app.route('/api', debugRouter);
+app.route('/api', widgetRouter);
 app.route('/', loxoneRouter);
 
 app.get('/', (c) => {
