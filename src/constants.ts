@@ -11,6 +11,8 @@ export const WIDGET_LAST_REFRESH_KEY = 'meteoblick_widget_last_refresh';
 export const WIDGET_LOXONE_CONFIG_KEY = 'loxone_config_widget';
 export const WIDGET_LOXONE_SENSOR_DATA_KEY = 'loxone_sensor_data';
 export const WIDGET_WEATHER_SNAPSHOT_KEY = 'meteoblick_widget_weather_snapshot';
+export const WIDGET_TIMELINE_CALLED_KEY = 'meteoblick_widget_timeline_called';
+export const WIDGET_SNAPSHOT_WRITTEN_AT_KEY = 'meteoblick_widget_snapshot_written_at';
 
 // Build number (update before each release)
 export const BUILD_NUMBER = '260707-1113';

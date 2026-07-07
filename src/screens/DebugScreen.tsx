@@ -12,13 +12,13 @@ import * as TaskManager from 'expo-task-manager';
 
 export default function DebugScreen() {
   const [lastFetchInfo, setLastFetchInfo] = useState<any>(null);
-  const [widgetLastRefresh, setWidgetLastRefresh] = useState<string | null>(null);
+  const [widgetSnapshotWrittenAt, setWidgetSnapshotWrittenAt] = useState<string | null>(null);
+  const [widgetTimelineCalled, setWidgetTimelineCalled] = useState<string | null>(null);
+  const [nextTimelineCall, setNextTimelineCall] = useState<string | null>(null);
   const [backendDebugInfo, setBackendDebugInfo] = useState<any>(null);
   const [nextAppFetch, setNextAppFetch] = useState<string | null>(null);
   const [bgFetchStatus, setBgFetchStatus] = useState<string>('unknown');
   const [nextBgFetch, setNextBgFetch] = useState<string | null>(null);
-  const [nextWidgetRefresh, setNextWidgetRefresh] = useState<string | null>(null);
-  const [nextFreshData, setNextFreshData] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loxoneConfig, setLoxoneConfig] = useState<any>(null);
@@ -40,9 +40,15 @@ export default function DebugScreen() {
     const info = await MeteoSwissAPI.getLastFetchInfo();
     setLastFetchInfo(info);
 
-    // Load widget refresh info
-    const timestamp = await SharedStorage.getWidgetLastRefresh();
-    setWidgetLastRefresh(timestamp);
+    // Load widget timing info
+    const snapshotWrittenAt = await SharedStorage.getWidgetSnapshotWrittenAt();
+    setWidgetSnapshotWrittenAt(snapshotWrittenAt);
+    const timelineCalled = await SharedStorage.getWidgetTimelineCalled();
+    setWidgetTimelineCalled(timelineCalled);
+    if (timelineCalled) {
+      const next = new Date(timelineCalled).getTime() + 15 * 60 * 1000;
+      setNextTimelineCall(new Date(next).toISOString());
+    }
 
     // Load Loxone info
     const config = await SharedStorage.getLoxoneConfig();
@@ -75,31 +81,11 @@ export default function DebugScreen() {
       setNextAppFetch(new Date(nextFetchTime).toISOString());
     }
 
-    // Calculate next background fetch (15 minutes from last widget refresh)
-    // Note: iOS controls actual timing, this is just the earliest possible time
-    if (timestamp) {
+    // Calculate next background fetch (15 minutes from last app fetch)
+    if (info?.timestamp) {
       const now = Date.now();
-      const lastWidgetTime = new Date(timestamp).getTime();
-      const calculatedNextBg = lastWidgetTime + 15 * 60 * 1000;
-
-      // If calculated time is in the past, next fetch is overdue (show "now" or next interval from now)
-      const nextBgTime = calculatedNextBg < now ? now : calculatedNextBg;
-      setNextBgFetch(new Date(nextBgTime).toISOString());
-
-      // Widget refresh happens when background fetch runs
-      setNextWidgetRefresh(new Date(nextBgTime).toISOString());
-    }
-
-    // Next fresh data = earliest of next app fetch or next bg fetch
-    const now = Date.now();
-    const bgTime = timestamp ? Math.max(new Date(timestamp).getTime() + 15 * 60 * 1000, now) : null;
-    const times: number[] = [];
-    if (nextAppFetch) times.push(new Date(nextAppFetch).getTime());
-    if (bgTime !== null) times.push(bgTime);
-
-    if (times.length > 0) {
-      const earliest = Math.min(...times);
-      setNextFreshData(new Date(earliest).toISOString());
+      const calculated = new Date(info.timestamp).getTime() + 15 * 60 * 1000;
+      setNextBgFetch(new Date(Math.max(calculated, now)).toISOString());
     }
   };
 
@@ -249,21 +235,32 @@ export default function DebugScreen() {
 
             <Text style={styles.debugSectionTitle}>📊 Widget</Text>
             <View style={styles.debugRow}>
-              <Text style={styles.debugLabel}>Letztes Refresh:</Text>
+              <Text style={styles.debugLabel}>Daten geschrieben:</Text>
               <Text style={styles.debugValue}>
-                {widgetLastRefresh ? new Date(widgetLastRefresh).toLocaleString('de-CH') : 'n/a'}
+                {widgetSnapshotWrittenAt ? new Date(widgetSnapshotWrittenAt).toLocaleString('de-CH') : 'n/a'}
               </Text>
             </View>
             <View style={styles.debugRow}>
-              <Text style={styles.debugLabel}>Nächstes Refresh:</Text>
+              <Text style={styles.debugLabel}>Widget gerendert:</Text>
               <Text style={styles.debugValue}>
-                {nextWidgetRefresh ? new Date(nextWidgetRefresh).toLocaleString('de-CH') : 'n/a'}
+                {widgetTimelineCalled ? new Date(widgetTimelineCalled).toLocaleString('de-CH') : 'n/a'}
               </Text>
             </View>
             <View style={styles.debugRow}>
-              <Text style={styles.debugLabel}>Nächste frische Daten:</Text>
+              <View style={styles.labelWithIcon}>
+                <Text style={styles.debugLabel}>getTimeline() nächstes:</Text>
+                <TouchableOpacity
+                  onPress={() => Alert.alert(
+                    'Widget Timeline',
+                    'Das Widget fordert alle 15 Minuten einen Refresh an. iOS entscheidet den genauen Zeitpunkt selbst — basierend auf App-Nutzung, Batteriestand und anderen System-Bedingungen.'
+                  )}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Text style={styles.infoIcon}>ℹ️</Text>
+                </TouchableOpacity>
+              </View>
               <Text style={styles.debugValue}>
-                {nextFreshData ? new Date(nextFreshData).toLocaleString('de-CH') : 'n/a'}
+                {nextTimelineCall ? new Date(nextTimelineCall).toLocaleString('de-CH') : 'n/a'}
               </Text>
             </View>
 

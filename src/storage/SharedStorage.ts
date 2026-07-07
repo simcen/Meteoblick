@@ -1,6 +1,6 @@
 import SharedGroupPreferences from 'react-native-shared-group-preferences';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { APP_GROUP_ID, POI_STORAGE_KEY, WEATHER_DATA_KEY, WIDGET_LAST_REFRESH_KEY, WIDGET_LOXONE_CONFIG_KEY, WIDGET_LOXONE_SENSOR_DATA_KEY } from '../constants';
+import { APP_GROUP_ID, POI_STORAGE_KEY, WEATHER_DATA_KEY, WIDGET_LAST_REFRESH_KEY, WIDGET_LOXONE_CONFIG_KEY, WIDGET_LOXONE_SENSOR_DATA_KEY, WIDGET_TIMELINE_CALLED_KEY, WIDGET_SNAPSHOT_WRITTEN_AT_KEY } from '../constants';
 import type { WeatherData } from '../types/weather';
 import type { POI } from '../types/poi';
 
@@ -102,6 +102,24 @@ export const SharedStorage = {
     try {
       const timestamp = await SharedGroupPreferences.getItem(WIDGET_LAST_REFRESH_KEY, APP_GROUP_ID);
       return timestamp;
+    } catch (error) {
+      return null;
+    }
+  },
+
+  async getWidgetTimelineCalled(): Promise<string | null> {
+    try {
+      const timestamp = await SharedGroupPreferences.getItem(WIDGET_TIMELINE_CALLED_KEY, APP_GROUP_ID);
+      return timestamp || null;
+    } catch (error) {
+      return null;
+    }
+  },
+
+  async getWidgetSnapshotWrittenAt(): Promise<string | null> {
+    try {
+      const timestamp = await SharedGroupPreferences.getItem(WIDGET_SNAPSHOT_WRITTEN_AT_KEY, APP_GROUP_ID);
+      return timestamp || null;
     } catch (error) {
       return null;
     }

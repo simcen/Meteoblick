@@ -37,14 +37,20 @@ enum SnapshotStore {
     static let appGroup = "group.ch.meteoblick"
     static let key = "meteoblick_widget_weather_snapshot"
 
-    /// Read the snapshot written by the host app. Returns a sensible
-    /// default if the app hasn't run yet (or if it's been a while).
-    static func read() -> WidgetSnapshot {
+    /// Read the snapshot written by the host app, optionally overriding refreshedAt.
+    /// Pass a HH:mm string from getTimeline() so the widget shows when it last rendered,
+    /// not just when the app last fetched.
+    static func read(overrideRefreshedAt: String? = nil) -> WidgetSnapshot {
         let defaults = UserDefaults(suiteName: appGroup) ?? .standard
         if let json = defaults.string(forKey: key),
-           let data = json.data(using: .utf8),
-           let snapshot = try? JSONDecoder().decode(WidgetSnapshot.self, from: data) {
-            return snapshot
+           var dict = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any] {
+            if let override = overrideRefreshedAt {
+                dict["refreshedAt"] = override
+            }
+            if let data = try? JSONSerialization.data(withJSONObject: dict),
+               let snapshot = try? JSONDecoder().decode(WidgetSnapshot.self, from: data) {
+                return snapshot
+            }
         }
         return WidgetSnapshot(
             locationName: "Keine Daten",
@@ -58,7 +64,7 @@ enum SnapshotStore {
             precipitationUnit: "mm",
             precipitationLabel: "💧",
             timestampActual: "",
-            refreshedAt: "",
+            refreshedAt: overrideRefreshedAt ?? "",
             buildNumber: "dev"
         )
     }
@@ -78,9 +84,14 @@ struct MeteoblickProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<MeteoblickEntry>) -> Void) {
-        let entry = MeteoblickEntry(date: Date(), snapshot: SnapshotStore.read())
+        let now = Date()
+        let defaults = UserDefaults(suiteName: SnapshotStore.appGroup)
+        defaults?.set(ISO8601DateFormatter().string(from: now), forKey: "meteoblick_widget_timeline_called")
+        let fmt = DateFormatter()
+        fmt.dateFormat = "HH:mm"
+        let entry = MeteoblickEntry(date: now, snapshot: SnapshotStore.read(overrideRefreshedAt: fmt.string(from: now)))
         // Refresh every 15 min; iOS may override.
-        let next = Date().addingTimeInterval(15 * 60)
+        let next = now.addingTimeInterval(15 * 60)
         completion(Timeline(entries: [entry], policy: .after(next)))
     }
 }

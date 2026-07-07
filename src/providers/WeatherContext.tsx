@@ -13,7 +13,7 @@ import { SharedStorage } from '../storage/SharedStorage';
 import { MeteoSwissAPI } from '../api/meteoswiss';
 import { LoxoneAPI } from '../api/loxone';
 import { updateWidget, fetchAndWriteWidgetTimeline } from '../widgets/widgetManager';
-import { APP_GROUP_ID, BUILD_NUMBER, WIDGET_WEATHER_SNAPSHOT_KEY } from '../constants';
+import { APP_GROUP_ID, BUILD_NUMBER, WIDGET_WEATHER_SNAPSHOT_KEY, WIDGET_SNAPSHOT_WRITTEN_AT_KEY } from '../constants';
 import type { WeatherData } from '../types/weather';
 
 /**
@@ -222,6 +222,19 @@ export function WeatherProvider({ children }: WeatherProviderProps) {
 
     if (weather) {
       try {
+        // Write snapshot to App Group BEFORE triggering WidgetKit reload,
+        // so getTimeline() always reads current data when iOS responds.
+        const snapshot = buildWidgetSnapshot(weather, loxoneTemp, fetchCompletedAt);
+        const snapshotWrittenAt = new Date().toISOString();
+        await SharedGroupPreferences.setItem(
+          WIDGET_WEATHER_SNAPSHOT_KEY,
+          JSON.stringify(snapshot),
+          APP_GROUP_ID,
+        );
+        await SharedGroupPreferences.setItem(WIDGET_SNAPSHOT_WRITTEN_AT_KEY, snapshotWrittenAt, APP_GROUP_ID);
+        console.log('[Weather] Widget snapshot written:', snapshot.locationName, snapshot.temperatureActual);
+
+        // Trigger WidgetKit reload — iOS calls getTimeline() which reads the snapshot above.
         await updateWidget({
           locationName: weather.locationName,
           temperatureActual: weather.temperatureActual,
@@ -235,21 +248,6 @@ export function WeatherProvider({ children }: WeatherProviderProps) {
           timestampLoxone: loxoneTimestamp ?? undefined,
         });
 
-        // Write the JS-computed layout snapshot to the App Group so the
-        // Widget can render it without doing its own symbol-mapping or
-        // string formatting. Swift just reads and displays.
-        const snapshot = buildWidgetSnapshot(weather, loxoneTemp, fetchCompletedAt);
-        await SharedGroupPreferences.setItem(
-          WIDGET_WEATHER_SNAPSHOT_KEY,
-          JSON.stringify(snapshot),
-          APP_GROUP_ID,
-        );
-        console.log('[Weather] Widget snapshot written:', snapshot.locationName, snapshot.temperatureActual);
-
-        // Also write the consolidated widget snapshot via the backend
-        // timeline endpoint — this is the source of truth for the Widget
-        // Extension (it can read it from App Group without depending on
-        // the host app's JS-side fetch results).
         await fetchAndWriteWidgetTimeline();
       } catch (error) {
         console.error('[Weather] Widget update failed:', error);
