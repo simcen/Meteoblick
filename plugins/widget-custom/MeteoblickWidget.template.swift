@@ -105,48 +105,91 @@ struct MeteoblickView: View {
     var body: some View {
         let s = entry.snapshot
         let isSmall = family == .systemSmall
-        let isMedium = family == .systemMedium
-        let _ = isMedium  // large layouts use medium spacing
 
-        VStack(alignment: .leading, spacing: isSmall ? 2 : 4) {
-            // Header: location + weather symbol
-            HStack(spacing: 4) {
-                Text(s.locationName)
-                    .font(.system(size: isSmall ? 11 : 13, weight: .semibold))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-                Spacer()
+        if isSmall {
+            smallBody(s: s)
+        } else {
+            mediumBody(s: s)
+        }
+    }
+
+    @ViewBuilder
+    private func smallBody(s: WidgetSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            // Location name — centered, wraps to 2 lines if needed
+            Text(s.locationName)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.white)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            // Weather emoji + temperature — centered, directly below location
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(s.weatherSymbol)
-                    .font(.system(size: isSmall ? 16 : 22))
+                    .font(.system(size: 22))
+                Text(s.temperatureActual)
+                    .font(.system(size: 26, weight: .bold))
+                    .foregroundColor(.white)
+                Text(s.temperatureUnit)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.white)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+
+            Spacer(minLength: 0)
+
+            // Smart home temperature — second half, left-aligned
+            if let lxTemp = s.temperatureLoxone {
+                HStack(spacing: 2) {
+                    Text(s.temperatureLoxoneLabel)
+                        .font(.system(size: 13))
+                    Text(lxTemp + "°")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+            }
+        }
+        .padding(6)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    @ViewBuilder
+    private func mediumBody(s: WidgetSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            // Location name — left-aligned
+            Text(s.locationName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.white)
+                .lineLimit(1)
+
+            // Weather emoji + temperature — left-aligned, directly below
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(s.weatherSymbol)
+                    .font(.system(size: 22))
+                Text(s.temperatureActual)
+                    .font(.system(size: 32, weight: .bold))
+                    .foregroundColor(.white)
+                Text(s.temperatureUnit)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.white)
             }
 
             Spacer(minLength: 0)
 
-            // MeteoSwiss IST temperature
-            HStack(spacing: 2) {
-                Text(s.weatherSymbolSmall)
-                    .font(.system(size: 10))
-                Text(s.temperatureActual)
-                    .font(.system(size: isSmall ? 24 : 32, weight: .bold))
-                    .foregroundColor(.white)
-                Text(s.temperatureUnit)
-                    .font(.system(size: isSmall ? 12 : 16, weight: .medium))
-                    .foregroundColor(.white)
-            }
-
-            // Loxone Smart-Home (alle Grössen, wenn verfügbar)
+            // Smart home temperature — second half, left-aligned
             if let lxTemp = s.temperatureLoxone {
                 HStack(spacing: 2) {
                     Text(s.temperatureLoxoneLabel)
-                        .font(.system(size: 10))
+                        .font(.system(size: 14))
                     Text(lxTemp + "°")
-                        .font(.system(size: isSmall ? 12 : 14, weight: .semibold))
+                        .font(.system(size: 20, weight: .semibold))
                         .foregroundColor(.white)
                 }
             }
 
-            // Precipitation (medium+ only, shown if > 0)
-            if !isSmall, Double(s.precipitation) ?? 0 > 0 {
+            // Precipitation (shown if > 0)
+            if Double(s.precipitation) ?? 0 > 0 {
                 HStack(spacing: 4) {
                     Text(s.precipitationLabel)
                         .font(.system(size: 10))
@@ -156,29 +199,25 @@ struct MeteoblickView: View {
                 }
             }
 
-            Spacer(minLength: 0)
-
-            // Footer: timestamps + build (medium+ only)
-            if !isSmall {
-                HStack(spacing: 6) {
-                    if !s.timestampActual.isEmpty {
-                        Text("📊 \(s.timestampActual)")
-                            .font(.system(size: 8))
-                            .foregroundColor(.white.opacity(0.7))
-                    }
-                    if !s.refreshedAt.isEmpty {
-                        Text("🔄 \(s.refreshedAt)")
-                            .font(.system(size: 8))
-                            .foregroundColor(.white.opacity(0.7))
-                    }
-                    Spacer()
-                    Text("Build \(s.buildNumber)")
+            // Footer: timestamps + build
+            HStack(spacing: 6) {
+                if !s.timestampActual.isEmpty {
+                    Text("📊 \(s.timestampActual)")
                         .font(.system(size: 8))
                         .foregroundColor(.white.opacity(0.7))
                 }
+                if !s.refreshedAt.isEmpty {
+                    Text("🔄 \(s.refreshedAt)")
+                        .font(.system(size: 8))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                Spacer()
+                Text("Build \(s.buildNumber)")
+                    .font(.system(size: 8))
+                    .foregroundColor(.white.opacity(0.7))
             }
         }
-        .padding(isSmall ? 8 : 12)
+        .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
@@ -204,6 +243,6 @@ struct MeteoblickWidget: Widget {
         }
         .configurationDisplayName("Meteoblick")
         .description("Wetter für deinen Standort")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+        .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
