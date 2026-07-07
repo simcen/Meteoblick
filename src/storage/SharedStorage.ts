@@ -113,7 +113,6 @@ export const SharedStorage = {
     username: string;
     password: string;
     temperatureSensorUUID?: string;
-    localIP?: string;
     enabled: boolean;
   } | null> {
     try {
@@ -131,7 +130,6 @@ export const SharedStorage = {
     username: string;
     password: string;
     temperatureSensorUUID?: string;
-    localIP?: string;
     enabled: boolean;
   }): Promise<void> {
     try {

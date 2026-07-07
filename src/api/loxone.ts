@@ -29,12 +29,6 @@ export interface LoxoneConfig {
   username: string;
   password: string;
   temperatureSensorUUID?: string; // Selected sensor UUID
-  localIP?: string;            // Manual override for local IP
-}
-
-export interface LoxoneConnection {
-  baseURL: string;
-  type: 'local' | 'cloud';
 }
 
 export interface LoxoneDNSResponse {
@@ -122,7 +116,13 @@ export class LoxoneAPI {
   }
 
   /**
-   * Get Miniserver connection (auto-detect local vs cloud)
+   * Get Miniserver connection (cloud only — local LAN IP support removed)
+   *
+   * All connections go through Loxone Cloud via the backend proxy. The proxy
+   * exists to work around iOS-simulator PAC-proxy issues and to centralize
+   * the auth flow. Previously this method also tried a local LAN IP, but
+   * that requires the backend to be on the same LAN as the Miniserver,
+   * which isn't the case in production (Heroku).
    */
   async getConnection(): Promise<LoxoneConnection> {
     if (this.connection) {
@@ -130,52 +130,17 @@ export class LoxoneAPI {
       return this.connection;
     }
 
-    console.log('[Loxone] Auto-detecting connection...');
+    console.log('[Loxone] Connecting via Loxone Cloud...');
 
-    // 0. Check for manual local IP (bypasses DNS query)
-    if (this.config.localIP) {
-      const localURL = `http://${this.config.localIP}`;
-      console.log('[Loxone] Using manual local IP:', localURL);
-
-      const isReachable = await this.testReachable(localURL, REACHABILITY_TIMEOUT_MS);
-
-      if (isReachable) {
-        this.connection = { baseURL: localURL, type: 'local' };
-        console.log('✅ [Loxone] Manual local connection successful:', localURL);
-        return this.connection;
-      } else {
-        console.log('⚠️ [Loxone] Manual local IP not reachable, trying DNS...');
-      }
+    // DNS query is still useful to (a) confirm the SNR is registered and
+    // (b) surface connection errors early with a meaningful message.
+    try {
+      const dnsInfo = await this.queryDNS();
+      console.log('[Loxone] DNS resolved, cloud IP:', dnsInfo.ip);
+    } catch (error: any) {
+      console.warn('[Loxone] DNS query failed (continuing with direct cloud URL):', error?.message ?? error);
     }
 
-    // 1. Query Loxone Cloud DNS Service
-    console.log('[Loxone] Querying DNS for SNR:', this.config.cloudAddress);
-    const dnsInfo = await this.queryDNS();
-    console.log('[Loxone] DNS response:', {
-      localIP: dnsInfo.localIP,
-      localPort: dnsInfo.localPort,
-      cloudIP: dnsInfo.ip,
-    });
-
-    // 2. Test local connection if localIP available
-    if (dnsInfo.localIP) {
-      const localURL = `http://${dnsInfo.localIP}:${dnsInfo.localPort || 80}`;
-      console.log('[Loxone] Testing local connection:', localURL);
-
-      const isLocalReachable = await this.testReachable(localURL, REACHABILITY_TIMEOUT_MS);
-
-      if (isLocalReachable) {
-        this.connection = { baseURL: localURL, type: 'local' };
-        console.log('✅ [Loxone] Using local connection:', localURL);
-        return this.connection;
-      } else {
-        console.log('⚠️ [Loxone] Local connection not reachable (timeout 3s)');
-      }
-    } else {
-      console.log('[Loxone] No localIP in DNS response');
-    }
-
-    // 3. Fallback to cloud
     const cloudURL = `${CLOUD_PREFIX}${this.config.cloudAddress}`;
     this.connection = { baseURL: cloudURL, type: 'cloud' };
     console.log('☁️ [Loxone] Using cloud connection:', cloudURL);
@@ -183,7 +148,9 @@ export class LoxoneAPI {
   }
 
   /**
-   * Query Loxone Cloud DNS Service for Miniserver IP (via backend proxy)
+   * Query Loxone Cloud DNS Service for Miniserver IP (via backend proxy).
+   * Marked as a probe so the backend forwards it without Auth — DNS queries
+   * must not count as login attempts on the Miniserver.
    */
   private async queryDNS(): Promise<LoxoneDNSResponse> {
     const url = `${LOXONE_PROXY_BASE}/?getip&snr=${this.config.cloudAddress}&json=true`;
@@ -196,7 +163,7 @@ export class LoxoneAPI {
     try {
       const response = await fetch(url, {
         signal: controller.signal,
-        headers: this.getProxyHeaders('https://dns.loxonecloud.com'),
+        headers: this.getProxyHeaders('https://dns.loxonecloud.com', true),
       });
       clearTimeout(timeoutId);
 
@@ -224,8 +191,9 @@ export class LoxoneAPI {
   }
 
   /**
-   * Network-level reachability check (via backend proxy). Any HTTP response
-   * (incl. 401) counts as reachable; only timeouts / network errors mean unreachable.
+   * Network-level reachability check (via backend proxy). Marked as probe so
+   * the backend forwards it without Auth — we don't want reachability checks
+   * to count as failed login attempts on the Miniserver.
    */
   private async testReachable(baseURL: string, timeout: number): Promise<boolean> {
     try {
@@ -233,7 +201,7 @@ export class LoxoneAPI {
       const timeoutId = setTimeout(() => controller.abort(), timeout);
       const response = await fetch(`${LOXONE_PROXY_BASE}/jdev/cfg/apiKey`, {
         signal: controller.signal,
-        headers: this.getProxyHeaders(baseURL),
+        headers: this.getProxyHeaders(baseURL, true),
       });
       clearTimeout(timeoutId);
       return response.status > 0;
@@ -243,15 +211,26 @@ export class LoxoneAPI {
   }
 
   /**
-   * Builds the standard proxy headers for a given base URL. Uses the raw
-   * password for unauthenticated probes (DNS query, reachability check);
-   * the token hash is used for authenticated requests via buildRequest().
+   * Builds the standard proxy headers for a given base URL.
+   *
+   * - For authenticated requests (apiKey fetch, structure file, temperature):
+   *   sends X-Loxone-Auth with the raw password (used during the first
+   *   apiKey exchange).
+   * - For probes (DNS query, reachability check): passes `probe=true` to omit
+   *   X-Loxone-Auth entirely and set X-Loxone-Probe so the backend forwards
+   *   without Authorization — these calls must not count as failed login
+   *   attempts on the Miniserver.
    */
-  private getProxyHeaders(baseURL: string): HeadersInit {
-    return {
+  private getProxyHeaders(baseURL: string, probe = false): HeadersInit {
+    const headers: Record<string, string> = {
       'X-Loxone-BaseURL': baseURL,
-      'X-Loxone-Auth': `Basic ${btoa(`${this.config.username}:${this.config.password}`)}`,
     };
+    if (probe) {
+      headers['X-Loxone-Probe'] = '1';
+    } else {
+      headers['X-Loxone-Auth'] = `Basic ${btoa(`${this.config.username}:${this.config.password}`)}`;
+    }
+    return headers;
   }
 
   /**
@@ -441,9 +420,11 @@ export class LoxoneAPI {
         `${apiKey}:${this.config.password}`,
       );
 
-      this.keyHash = hash;
+      // Loxone Cloud Miniserver expects UPPERCASE hex — verified empirically:
+      // lowercase → 401 Unauthorized, uppercase → accepted (tested with curl).
+      this.keyHash = hash.toUpperCase();
       console.log('[Loxone] Token authentication successful');
-      return hash;
+      return this.keyHash;
     } catch (error) {
       clearTimeout(timeoutId);
       throw error;
@@ -451,15 +432,22 @@ export class LoxoneAPI {
   }
 
   /**
-   * Build URL + headers for an authenticated request, using the cached token hash.
+   * Build URL + headers for an authenticated request.
+   *
+   * Empirically: the Miniserver accepts HTTP Basic Auth with the raw password
+   * for /data/LoxAPP3.json and /jdev/sps/io/{uuid}, but rejects the SHA-256
+   * SHA-256(apiKey+":"+password) hash for those endpoints (only /jdev/cfg/apiKey
+   * accepts the hash). So we send the password directly here.
+   *
+   * `ensureAuth` is still called beforehand to fetch /jdev/cfg/apiKey as a
+   * connectivity check (the endpoint is public but verifies the Miniserver is
+   * reachable and that our credentials are at least syntactically correct).
+   *
    * All requests are routed through the backend proxy to bypass iOS-simulator
    * PAC-proxy issues; the backend forwards them to the Miniserver.
    */
   private buildRequest(baseURL: string, path: string): { url: string; headers: HeadersInit } {
-    if (!this.keyHash) {
-      throw new Error('Loxone: buildRequest called before ensureAuth');
-    }
-    return this.buildProxyRequest(baseURL, path, this.keyHash);
+    return this.buildProxyRequest(baseURL, path, this.config.password);
   }
 
   /**

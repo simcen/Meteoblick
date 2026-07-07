@@ -17,6 +17,7 @@
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
+import { Agent, setGlobalDispatcher } from 'undici';
 
 const LOXONE_TIMEOUT_MS = 90000; // matches structure file timeout in app
 const ALLOWED_BASEURL_PATTERNS = [
@@ -26,6 +27,16 @@ const ALLOWED_BASEURL_PATTERNS = [
   /^http:\/\/(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})(?::\d{1,5})?$/,
 ];
 
+// Bypass system PAC proxy for Loxone Miniserver requests — the macOS PAC
+// resolver is unable to reach hosts on the local LAN (e.g. 172.16.3.5) and
+// fails every fetch with "fetch failed". Browsers get through because they
+// fall back to direct connection more aggressively. Use a no-proxy dispatcher.
+setGlobalDispatcher(
+  new Agent({
+    connect: { family: 4 }, // IPv4 only — avoids IPv6/IPv4 fallback races
+  }),
+);
+
 function isAllowedBaseURL(url: string): boolean {
   return ALLOWED_BASEURL_PATTERNS.some((re) => re.test(url));
 }
@@ -33,11 +44,15 @@ function isAllowedBaseURL(url: string): boolean {
 async function proxyToLoxone(c: Context): Promise<Response> {
   const baseURL = c.req.header('X-Loxone-BaseURL');
   const auth = c.req.header('X-Loxone-Auth');
+  const isProbe = c.req.header('X-Loxone-Probe') === '1';
 
   if (!baseURL) {
     return c.json({ error: 'missing_header', message: 'X-Loxone-BaseURL header is required' }, 400);
   }
-  if (!auth) {
+  // Probe requests (DNS query, reachability checks) may omit X-Loxone-Auth so
+  // they don't count as failed login attempts on the Miniserver. Authenticated
+  // requests still require the header.
+  if (!auth && !isProbe) {
     return c.json({ error: 'missing_header', message: 'X-Loxone-Auth header is required' }, 400);
   }
   if (!isAllowedBaseURL(baseURL)) {
@@ -60,9 +75,18 @@ async function proxyToLoxone(c: Context): Promise<Response> {
 
   try {
     // Pass-through body for non-GET/HEAD requests
+    const requestHeaders: Record<string, string> = {
+      // The Loxone Miniserver sends gzip-encoded bodies without advertising
+      // Content-Encoding, causing the Content-Length header to mismatch the
+      // actual body length — this causes "JSON Parse error: Unexpected end
+      // of input" on the client side. Force identity encoding to get raw bytes.
+      'Accept-Encoding': 'identity',
+    };
+    if (auth) requestHeaders.Authorization = auth;
+
     const init: RequestInit = {
       method: c.req.method,
-      headers: { Authorization: auth },
+      headers: requestHeaders,
       signal: controller.signal,
       // manual: we re-send auth headers on each redirect hop, which the
       // default 'follow' policy strips for cross-origin hops (→ 401 on
@@ -105,10 +129,22 @@ async function proxyToLoxone(c: Context): Promise<Response> {
       if (['content-encoding', 'transfer-encoding', 'connection'].includes(key.toLowerCase())) return;
       responseHeaders.set(key, value);
     });
+    // Prevent iOS / CFNetwork from caching Miniserver responses — they've
+    // caused "JSON Parse error: Unexpected end of input" when a cached body
+    // is read back truncated. Miniserver responses are user/state-specific
+    // and never shareable.
+    responseHeaders.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    responseHeaders.set('Pragma', 'no-cache');
 
     const body = await response.arrayBuffer();
+    const bodyLength = body.byteLength;
 
     console.log(`[LoxoneProxy] ${c.req.method} ${fullTarget} → ${response.status} (after ${hops} redirect${hops === 1 ? '' : 's'})`);
+    console.log(`[LoxoneProxy]   body: ${bodyLength} bytes, content-length header: ${response.headers.get('content-length')}`);
+    if (response.headers.get('content-length') && parseInt(response.headers.get('content-length')!) !== bodyLength) {
+      console.warn(`[LoxoneProxy]   ⚠️  body length mismatch — header says ${response.headers.get('content-length')}, got ${bodyLength}`);
+    }
+
     return new Response(body, {
       status: response.status,
       headers: responseHeaders,

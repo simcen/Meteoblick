@@ -26,8 +26,7 @@ export default function SmartHomeScreen() {
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
   const [loadingSensors, setLoadingSensors] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [manualLocalIP, setManualLocalIP] = useState('');
+  const [showAdvanced] = useState(false); // deprecated — UI removed (local IP support dropped)
   const [sensorSearchQuery, setSensorSearchQuery] = useState('');
   const [configSaved, setConfigSaved] = useState(false);
   const [showSensors, setShowSensors] = useState(true);
@@ -48,10 +47,6 @@ export default function SmartHomeScreen() {
       setUsername(config.username);
       setPassword(config.password);
       setSelectedSensorUUID(config.temperatureSensorUUID);
-      setManualLocalIP(config.localIP || '');
-      if (config.localIP) {
-        setShowAdvanced(true); // Show advanced if localIP is set
-      }
       if (config.enabled && config.temperatureSensorUUID) {
         setConfigSaved(true);
         setShowConnection(false);
@@ -77,17 +72,16 @@ export default function SmartHomeScreen() {
         cloudAddress,
         username,
         password,
-        localIP: manualLocalIP || undefined,
+        localIP: undefined, // removed — local IP support dropped
       });
 
       const connection = await api.getConnection();
 
       const connectionType = connection.type === 'local' ? 'Lokal' : 'Cloud';
-      const usingManualIP = manualLocalIP && connection.baseURL.includes(manualLocalIP);
 
       Alert.alert(
         'Verbindung erfolgreich',
-        `Typ: ${connectionType}${usingManualIP ? ' (Manuelle IP)' : ''}\n` +
+        `Typ: ${connectionType}\n` +
           `URL: ${connection.baseURL}\n\n` +
           'Die Verbindung zum Loxone Miniserver funktioniert!'
       );
@@ -112,7 +106,7 @@ export default function SmartHomeScreen() {
         cloudAddress,
         username,
         password,
-        localIP: manualLocalIP || undefined,
+        localIP: undefined, // removed — local IP support dropped
       });
       const temp = await api.getTemperature(uuid);
       setPreviewTemperature(temp);
@@ -140,7 +134,7 @@ export default function SmartHomeScreen() {
         cloudAddress,
         username,
         password,
-        localIP: manualLocalIP || undefined,
+        localIP: undefined, // removed — local IP support dropped
       });
 
       console.log('[SmartHome] Loading sensors...');
@@ -174,7 +168,7 @@ export default function SmartHomeScreen() {
         username,
         password,
         temperatureSensorUUID: selectedSensorUUID,
-        localIP: manualLocalIP || undefined,
+        localIP: undefined, // removed — local IP support dropped
         enabled,
       });
 
@@ -211,7 +205,7 @@ export default function SmartHomeScreen() {
             setSelectedSensorUUID(undefined);
             setSensors([]);
             setManualLocalIP('');
-            setShowAdvanced(false);
+            // showAdvanced state removed (local IP UI gone)
             setConfigSaved(false);
             setShowConnection(true);
             setShowSensors(true);
@@ -307,36 +301,7 @@ export default function SmartHomeScreen() {
                 loading={testing}
               />
 
-              {/* Advanced Settings Toggle */}
-              <TouchableOpacity
-                style={styles.advancedToggle}
-                onPress={() => setShowAdvanced(!showAdvanced)}
-              >
-                <Text style={styles.advancedToggleText}>
-                  {showAdvanced ? '▼' : '▶'} Erweiterte Einstellungen
-                </Text>
-              </TouchableOpacity>
-
-              {showAdvanced && (
-                <View style={styles.advancedSection}>
-                  <Text style={styles.inputLabel}>Lokale IP (manuell)</Text>
-                  <Text style={styles.hint}>
-                    Nur nötig bei Corporate Proxy / Simulator.{'\n'}
-                    Leer lassen für automatische Erkennung.
-                  </Text>
-                  <TextInput
-                    style={styles.input}
-                    value={manualLocalIP}
-                    onChangeText={setManualLocalIP}
-                    placeholder="z.B. 192.168.1.47"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    keyboardType="url"
-                    editable={!loading}
-                  />
-                </View>
-              )}
-            </View>
+              </View>
           )}
         </View>
 
