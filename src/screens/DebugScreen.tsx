@@ -1,16 +1,34 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, RefreshControl } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, { useAnimatedScrollHandler } from 'react-native-reanimated';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { SharedStorage } from '../storage/SharedStorage';
 import { MeteoSwissAPI } from '../api/meteoswiss';
 import { LoxoneAPI } from '../api/loxone';
 import { updateWidget } from '../widgets/widgetManager';
 import { Button } from '../components/Button';
 import { BUILD_NUMBER, API_BASE_URL } from '../constants';
+import { useScrollContext } from '../contexts/ScrollContext';
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as TaskManager from 'expo-task-manager';
 
 export default function DebugScreen() {
+  const insets = useSafeAreaInsets();
+  const { sharedScrollY } = useScrollContext();
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      sharedScrollY.value = e.contentOffset.y;
+    },
+  });
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        sharedScrollY.value = 0;
+      };
+    }, [sharedScrollY])
+  );
+
   const [lastFetchInfo, setLastFetchInfo] = useState<any>(null);
   const [widgetSnapshotWrittenAt, setWidgetSnapshotWrittenAt] = useState<string | null>(null);
   const [widgetTimelineCalled, setWidgetTimelineCalled] = useState<string | null>(null);
@@ -192,15 +210,18 @@ export default function DebugScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <ScrollView
+    <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+      <Animated.ScrollView
         style={styles.scrollView}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
       >
-        <View style={styles.container}>
-          <View style={styles.debugContainer}>
+        {/* Top padding: original 20 + status bar inset + app header height (56) + extra spacing */}
+          <View style={[styles.container, { paddingTop: 20 + insets.top + 56 + 16 }]}>
+            <View style={styles.debugContainer}>
             <Text style={styles.debugTitle}>🔍 Debug Info</Text>
             <View style={styles.debugRow}>
               <Text style={styles.debugLabel}>App Build:</Text>
@@ -369,7 +390,7 @@ export default function DebugScreen() {
             </View>
           </View>
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
     </SafeAreaView>
   );
 }

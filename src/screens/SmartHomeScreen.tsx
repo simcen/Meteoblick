@@ -1,24 +1,40 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   TextInput,
   StyleSheet,
-  ScrollView,
   Alert,
   ActivityIndicator,
   Switch,
   TouchableOpacity,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { SharedStorage } from '../storage/SharedStorage';
 import { LoxoneAPI, type LoxoneTemperatureSensor } from '../api/loxone';
 import { useWeather } from '../providers/WeatherContext';
+import { useScrollContext } from '../contexts/ScrollContext';
 import { Button } from '../components/Button';
 import { Colors, Typography, Spacing, Layout } from '../constants/designSystem';
 
 export default function SmartHomeScreen() {
+  const insets = useSafeAreaInsets();
   const { refresh: refreshWeather } = useWeather();
+  const { sharedScrollY } = useScrollContext();
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      sharedScrollY.value = e.contentOffset.y;
+    },
+  });
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        sharedScrollY.value = 0;
+      };
+    }, [sharedScrollY])
+  );
   const [enabled, setEnabled] = useState(false);
   const [cloudAddress, setCloudAddress] = useState('504F94A1874F'); // Pre-filled
   const [username, setUsername] = useState('');
@@ -221,10 +237,15 @@ export default function SmartHomeScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScrollView
+    <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+      <Animated.ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.contentContainer}
+        contentContainerStyle={[
+          styles.contentContainer,
+          { paddingTop: insets.top + Layout.height.appHeader + Spacing.md },
+        ]}
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
       >
         <View style={styles.header}>
           <Text style={styles.title}>Loxone Smart Home</Text>
@@ -505,7 +526,7 @@ export default function SmartHomeScreen() {
             </Text>
           </View>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
     </SafeAreaView>
   );
 }

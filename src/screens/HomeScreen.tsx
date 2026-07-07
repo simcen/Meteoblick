@@ -1,15 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
-import { View, Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard, Alert, ActivityIndicator, FlatList, TouchableOpacity, RefreshControl, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard, Alert, ActivityIndicator, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
+import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { SharedStorage } from '../storage/SharedStorage';
 import { MeteoSwissAPI } from '../api/meteoswiss';
 import { Button } from '../components/Button';
 import { Colors, Typography, Spacing, Layout, ComponentStyles } from '../constants/designSystem';
+import { useScrollContext } from '../contexts/ScrollContext';
 import { useWeather } from '../providers/WeatherContext';
 import type { POI } from '../types/poi';
 
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
   const [pointId, setPointId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,6 +23,23 @@ export default function HomeScreen() {
   // Weather + Loxone state come from the shared context so the screen updates
   // automatically when the foreground refresh interval fires.
   const { weather: weatherData, loxoneTemp, loxoneTimestamp, isFetching: refreshing, refresh } = useWeather();
+
+  // Wire our ScrollView into the AppHeader's shared scrollY value so the
+  // header fades as the user scrolls. On blur, reset to 0 so the header is
+  // fully opaque when this screen regains focus or another tab is shown.
+  const { sharedScrollY } = useScrollContext();
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      sharedScrollY.value = e.contentOffset.y;
+    },
+  });
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        sharedScrollY.value = 0;
+      };
+    }, [sharedScrollY])
+  );
 
   // Refresh weather + Loxone every time the screen comes into focus.
   // The Context owns the actual fetch + state — we just kick it.
@@ -114,17 +134,23 @@ export default function HomeScreen() {
 
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safeArea} edges={['bottom']}>
       <KeyboardAvoidingView
         style={styles.keyboardAvoid}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView
+        <Animated.ScrollView
           style={styles.container}
+          contentContainerStyle={[
+            styles.contentContainer,
+            { paddingTop: insets.top + Layout.height.appHeader + Spacing.md },
+          ]}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
           keyboardShouldPersistTaps="handled"
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
         >
           <Text style={styles.label}>Standort suchen</Text>
 
@@ -222,7 +248,7 @@ export default function HomeScreen() {
                   </Text>
                 </View>
               )}
-        </ScrollView>
+        </Animated.ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -239,6 +265,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: Spacing.screenHorizontal,
+  },
+  contentContainer: {
+    // paddingTop set dynamically from insets + Layout.height.appHeader
   },
   label: {
     ...Typography.headline,

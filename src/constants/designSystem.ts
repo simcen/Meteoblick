@@ -48,6 +48,10 @@ export const Colors = {
   // Tint Color (Brand)
   tint: '#3366CC',                // Brand Blue
 
+  // Header Gradient (matches widget)
+  gradientStart: '#58BEF6',
+  gradientEnd: '#3366CC',
+
   // Accent Colors
   accent: {
     blue: '#007AFF',              // systemBlue
@@ -199,6 +203,7 @@ export const Layout = {
     listItem: 44,
     headerLarge: 96,
     headerRegular: 44,
+    appHeader: 56,
   },
 
   // Safe Area (for consistent insets)
