@@ -13,10 +13,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SharedStorage } from '../storage/SharedStorage';
 import { LoxoneAPI, type LoxoneTemperatureSensor } from '../api/loxone';
+import { useWeather } from '../providers/WeatherContext';
 import { Button } from '../components/Button';
 import { Colors, Typography, Spacing, Layout } from '../constants/designSystem';
 
 export default function SmartHomeScreen() {
+  const { refresh: refreshWeather } = useWeather();
   const [enabled, setEnabled] = useState(false);
   const [cloudAddress, setCloudAddress] = useState('504F94A1874F'); // Pre-filled
   const [username, setUsername] = useState('');
@@ -238,7 +240,33 @@ export default function SmartHomeScreen() {
             </View>
             <Switch
               value={enabled}
-              onValueChange={setEnabled}
+              onValueChange={(value) => {
+                setEnabled(value);
+                // The toggle is a single switch: on or off. It only persists
+                // the new state — sensor selection, cached temperatures and
+                // the sensor list stay intact so the user's configuration
+                // (incl. their chosen sensor UUID) is preserved across toggles.
+                // Sensor-list refresh, connection validation and "Sensoren
+                // geladen" popups belong to the explicit Save / "Sensoren
+                // laden" actions, not the toggle.
+                //
+                // After disabling we trigger a context refresh so the widget
+                // immediately drops the Loxone temperature (the next 5-min
+                // tick would clear it anyway, but the widget shouldn't show
+                // stale data for that long).
+                (async () => {
+                  try {
+                    const existing = await SharedStorage.getLoxoneConfig();
+                    if (!existing) return;
+                    await SharedStorage.setLoxoneConfig({ ...existing, enabled: value });
+                    if (!value) {
+                      refreshWeather();
+                    }
+                  } catch (error) {
+                    console.warn('[SmartHome] Toggle persist failed:', error);
+                  }
+                })();
+              }}
               trackColor={{ false: Colors.separator.opaque, true: Colors.tint }}
               thumbColor={Colors.background.primary}
             />

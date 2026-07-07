@@ -7,7 +7,7 @@ export const LAST_FETCH_KEY = 'meteoblick_last_fetch';
 export const WIDGET_LAST_REFRESH_KEY = 'meteoblick_widget_last_refresh';
 
 // Build number (update before each release)
-export const BUILD_NUMBER = '260706-1555';
+export const BUILD_NUMBER = '260707-0709';
 
 // API Configuration
 // In dev mode with iOS simulator + corporate PAC proxy, CFNetwork cancels
