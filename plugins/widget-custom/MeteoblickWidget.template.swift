@@ -41,7 +41,8 @@ enum SnapshotStore {
     /// default if the app hasn't run yet (or if it's been a while).
     static func read() -> WidgetSnapshot {
         let defaults = UserDefaults(suiteName: appGroup) ?? .standard
-        if let data = defaults.data(forKey: key),
+        if let json = defaults.string(forKey: key),
+           let data = json.data(using: .utf8),
            let snapshot = try? JSONDecoder().decode(WidgetSnapshot.self, from: data) {
             return snapshot
         }
@@ -88,12 +89,7 @@ struct MeteoblickProvider: TimelineProvider {
 
 struct MeteoblickView: View {
     let entry: MeteoblickEntry
-    let family: WidgetFamily
-
-    init(entry: MeteoblickEntry, family: WidgetFamily) {
-        self.entry = entry
-        self.family = family
-    }
+    @Environment(\.widgetFamily) var family
 
     var body: some View {
         let s = entry.snapshot
@@ -183,7 +179,7 @@ struct MeteoblickWidget: Widget {
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: name, provider: MeteoblickProvider()) { entry in
-            MeteoblickView(entry: entry, family: .systemSmall)
+            MeteoblickView(entry: entry)
                 .containerBackground(.fill.tertiary, for: .widget)
         }
         .configurationDisplayName("Meteoblick")
