@@ -114,7 +114,7 @@ heroku addons:create heroku-postgresql:essential-0
 
 ```bash
 heroku config:set NODE_ENV=production
-heroku config:set API_BASE_URL=https://meteoblick-api.herokuapp.com
+heroku config:set API_BASE_URL=https://meteoblick-api.apps.balz.me
 ```
 
 ### 3. Deploy

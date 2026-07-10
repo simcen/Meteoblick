@@ -27,7 +27,7 @@ API client collection for [Bruno](https://www.usebruno.com/) - an open-source AP
 - **Admin Token:** `dev-secret-token-12345`
 
 ### Production
-- **Base URL:** `https://meteoblick-api.herokuapp.com`
+- **Base URL:** `https://meteoblick-api.apps.balz.me`
 - **Admin Token:** Set in `environments/Production.bru` after deployment
 
 ## Available Requests

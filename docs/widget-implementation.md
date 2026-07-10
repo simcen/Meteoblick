@@ -189,7 +189,7 @@ func fetchTimelineEntries() async -> [MeteoblickEntry] {
     let poiId = await readActivePoiId()  // From "meteoblick_poi_id" in App Group
     guard let poiId else { return [placeholderNow()] }
 
-    let baseURL = URL(string: "https://meteoblick-api-17f0b6fdf031.herokuapp.com")!
+    let baseURL = URL(string: "https://meteoblick-api.apps.balz.me")!
     // In dev: use the Mac IP or ngrok tunnel
     // let baseURL = URL(string: "http://172.16.100.10:3000")!
 

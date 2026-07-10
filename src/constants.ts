@@ -15,13 +15,13 @@ export const WIDGET_TIMELINE_CALLED_KEY = 'meteoblick_widget_timeline_called';
 export const WIDGET_SNAPSHOT_WRITTEN_AT_KEY = 'meteoblick_widget_snapshot_written_at';
 
 // Build number (update before each release)
-export const BUILD_NUMBER = '260707-1113';
+export const BUILD_NUMBER = '260710-1547';
 
 // API Configuration
 // In dev mode with iOS simulator + corporate PAC proxy, CFNetwork cancels
 // localhost connections. We hardcode the Mac's en0 IP here as a workaround.
 // To change: update this constant and reload Metro / restart the app.
-const DEV_API_BASE_URL = 'http://172.16.100.10:3000';
+const DEV_API_BASE_URL = 'http://localhost:3000';
 
 // We still try Constants for cases where it's available (Expo Go, future builds).
 const extra = (Constants.expoConfig?.extra ?? Constants.manifest?.extra ?? {}) as {
@@ -29,4 +29,4 @@ const extra = (Constants.expoConfig?.extra ?? Constants.manifest?.extra ?? {}) a
 };
 export const API_BASE_URL =
   extra.apiBaseUrl ||
-  (__DEV__ ? DEV_API_BASE_URL : 'https://meteoblick-api-17f0b6fdf031.herokuapp.com');
+  (__DEV__ ? DEV_API_BASE_URL : "https://meteoblick-api.apps.balz.me");
