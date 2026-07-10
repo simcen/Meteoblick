@@ -36,6 +36,19 @@ export function DrawerContent(props: any) {
         }}
         labelStyle={styles.itemLabel}
       />
+      <DrawerItem
+        label="Debug"
+        icon={({ size }: { size: number }) => (
+          <Text style={[styles.itemIcon, { fontSize: size }]}>🛠️</Text>
+        )}
+        onPress={() => {
+          props.navigation.closeDrawer();
+          // Debug is a Stack modal inside "Main", so navigate into the parent
+          // route and target the screen there.
+          props.navigation.navigate('Main', { screen: 'Debug' });
+        }}
+        labelStyle={styles.itemLabel}
+      />
     </DrawerContentScrollView>
   );
 }

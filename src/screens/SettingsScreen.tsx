@@ -1,24 +1,69 @@
 /**
- * SettingsScreen — placeholder for app-level configuration, presented as a
- * modal that slides up from the bottom and partially covers the app header.
+ * SettingsScreen — main settings index, presented as a modal.
  *
- * Currently shows static "App Info" (name, build, description). POI selection
- * and Loxone config will be moved here in a follow-up task.
+ * Three sections:
+ * 1. Navigation items: Orte (POI search) and Smart Home (Loxone config)
+ *    Each opens a dedicated sub-screen in the Settings stack.
+ * 2. App Info (read-only): name, version, build, SDK
  */
+import { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, Text, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { SharedStorage } from '../storage/SharedStorage';
 import { Colors, Spacing, Typography } from '../constants/designSystem';
 import { BUILD_NUMBER } from '../constants';
 
 // Expo SDK version — manual constant, Expo SDK is at 57
 const EXPO_SDK_VERSION = '57';
 const APP_VERSION = '1.0.0';
-const APP_DESCRIPTION = 'Wetter für deinen Standort – inklusive Smart-Home-Temperatur im Widget.';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+
+  const [locationName, setLocationName] = useState<string | null>(null);
+  const [loxoneStatus, setLoxoneStatus] = useState<'configured' | 'enabled' | 'disabled' | 'none'>('none');
+
+  // Reload summaries every time Settings opens
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      (async () => {
+        const poiId = await SharedStorage.getPointId();
+        if (!cancelled) setLocationName(poiId);
+
+        const loxone = await SharedStorage.getLoxoneConfig();
+        if (!cancelled) {
+          if (!loxone) setLoxoneStatus('none');
+          else if (loxone.enabled) setLoxoneStatus('enabled');
+          else setLoxoneStatus('disabled');
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
+
+  // Initial load (covers the case where Settings opens for the first time)
+  useEffect(() => {
+    (async () => {
+      setLocationName(await SharedStorage.getPointId());
+      const loxone = await SharedStorage.getLoxoneConfig();
+      if (!loxone) setLoxoneStatus('none');
+      else if (loxone.enabled) setLoxoneStatus('enabled');
+      else setLoxoneStatus('disabled');
+    })();
+  }, []);
+
+  const locationSubtitle = locationName ?? 'Nicht konfiguriert';
+  const loxoneSubtitle =
+    loxoneStatus === 'enabled'
+      ? 'Aktiviert'
+      : loxoneStatus === 'disabled'
+        ? 'Deaktiviert'
+        : 'Nicht konfiguriert';
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
@@ -34,14 +79,27 @@ export default function SettingsScreen() {
           <Text style={styles.closeIcon}>✕</Text>
         </Pressable>
       </View>
-      <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          { paddingTop: Spacing.lg + Spacing.md },
-        ]}
-      >
+      <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>Einstellungen</Text>
 
+        {/* Navigation items */}
+        <View style={styles.menuGroup}>
+          <MenuItem
+            icon="📍"
+            title="Orte"
+            subtitle={locationSubtitle}
+            onPress={() => navigation.navigate('Orte' as never)}
+          />
+          <MenuItem
+            icon="🏠"
+            title="Smart Home"
+            subtitle={loxoneSubtitle}
+            onPress={() => navigation.navigate('Loxone' as never)}
+            isLast
+          />
+        </View>
+
+        {/* App Info */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>App Info</Text>
           <Row label="Name" value="Meteoblick" />
@@ -49,10 +107,42 @@ export default function SettingsScreen() {
           <Row label="Build" value={BUILD_NUMBER} />
           <Row label="Expo SDK" value={EXPO_SDK_VERSION} />
         </View>
-
-        <Text style={styles.description}>{APP_DESCRIPTION}</Text>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function MenuItem({
+  icon,
+  title,
+  subtitle,
+  onPress,
+  isLast,
+}: {
+  icon: string;
+  title: string;
+  subtitle: string;
+  onPress: () => void;
+  isLast?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.menuItem,
+        isLast && styles.menuItemLast,
+        pressed && styles.menuItemPressed,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={`${title} öffnen`}
+    >
+      <Text style={styles.menuIcon}>{icon}</Text>
+      <View style={styles.menuText}>
+        <Text style={styles.menuTitle}>{title}</Text>
+        <Text style={styles.menuSubtitle}>{subtitle}</Text>
+      </View>
+      <Text style={styles.menuChevron}>›</Text>
+    </Pressable>
   );
 }
 
@@ -89,13 +179,55 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   content: {
-    padding: Spacing.screenHorizontal,
+    paddingHorizontal: Spacing.screenHorizontal,
     paddingBottom: Spacing.lg,
   },
   title: {
     ...Typography.title2,
     color: Colors.label.primary,
     marginBottom: Spacing.lg,
+  },
+  menuGroup: {
+    backgroundColor: Colors.background.secondary,
+    borderRadius: 12,
+    marginBottom: Spacing.lg,
+    overflow: 'hidden',
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.separator.nonOpaque,
+  },
+  menuItemLast: {
+    borderBottomWidth: 0,
+  },
+  menuItemPressed: {
+    backgroundColor: Colors.fill.tertiary,
+  },
+  menuIcon: {
+    fontSize: 22,
+    marginRight: Spacing.md,
+  },
+  menuText: {
+    flex: 1,
+  },
+  menuTitle: {
+    ...Typography.body,
+    color: Colors.label.primary,
+    fontWeight: '500',
+  },
+  menuSubtitle: {
+    ...Typography.caption1,
+    color: Colors.label.secondary,
+    marginTop: 2,
+  },
+  menuChevron: {
+    fontSize: 24,
+    color: Colors.label.tertiary,
+    marginLeft: Spacing.sm,
   },
   section: {
     backgroundColor: Colors.background.secondary,
@@ -127,10 +259,5 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'right',
     marginLeft: Spacing.md,
-  },
-  description: {
-    ...Typography.footnote,
-    color: Colors.label.secondary,
-    lineHeight: 20,
   },
 });

@@ -17,6 +17,8 @@ import HomeScreen from '../src/screens/HomeScreen';
 import SmartHomeScreen from '../src/screens/SmartHomeScreen';
 import DebugScreen from '../src/screens/DebugScreen';
 import SettingsScreen from '../src/screens/SettingsScreen';
+import OrteScreen from '../src/screens/OrteScreen';
+import LoxoneConfigScreen from '../src/screens/LoxoneConfigScreen';
 
 // Import widget to ensure Metro bundles it for expo-widgets compiler
 import '../widgets/MeteoblickWidget';
@@ -53,15 +55,6 @@ function TabNavigator() {
           tabBarAccessibilityLabel: 'Smart Home Tab',
         }}
       />
-      <Tabs.Screen
-        name="Debug"
-        component={DebugScreen}
-        options={{
-          title: 'Debug',
-          tabBarIcon: TabBarIcon('wrench.and.screwdriver.fill'),
-          tabBarAccessibilityLabel: 'Debug-Tab',
-        }}
-      />
     </Tabs.Navigator>
   );
 }
@@ -79,9 +72,10 @@ function MainScreen() {
   );
 }
 
-// Stack wraps the Main screen as the default route, plus a Settings modal that
-// slides in from the bottom. iOS-standard modal presentation shows the
-// underlying Main screen (with header) slightly visible at the top.
+// Stack wraps the Main screen as the default route, plus Settings, Orte,
+// Loxone and Debug modals that slide in from the bottom. iOS-standard modal
+// presentation shows the underlying Main screen (with header) slightly visible
+// at the top.
 function MainStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -89,6 +83,30 @@ function MainStack() {
       <Stack.Screen
         name="Settings"
         component={SettingsScreen}
+        options={{
+          presentation: 'modal',
+          gestureEnabled: true,
+        }}
+      />
+      <Stack.Screen
+        name="Orte"
+        component={OrteScreen}
+        options={{
+          presentation: 'modal',
+          gestureEnabled: true,
+        }}
+      />
+      <Stack.Screen
+        name="Loxone"
+        component={LoxoneConfigScreen}
+        options={{
+          presentation: 'modal',
+          gestureEnabled: true,
+        }}
+      />
+      <Stack.Screen
+        name="Debug"
+        component={DebugScreen}
         options={{
           presentation: 'modal',
           gestureEnabled: true,

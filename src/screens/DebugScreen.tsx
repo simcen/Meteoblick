@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, RefreshControl } from 'react-native';
 import Animated, { useAnimatedScrollHandler } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { SharedStorage } from '../storage/SharedStorage';
 import { MeteoSwissAPI } from '../api/meteoswiss';
 import { LoxoneAPI } from '../api/loxone';
@@ -15,6 +15,7 @@ import * as TaskManager from 'expo-task-manager';
 
 export default function DebugScreen() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
   const { sharedScrollY } = useScrollContext();
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (e) => {
@@ -211,6 +212,17 @@ export default function DebugScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+      <View style={[styles.closeRow, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          accessibilityRole="button"
+          accessibilityLabel="Schliessen"
+          style={styles.closeButton}
+        >
+          <Text style={styles.closeIcon}>✕</Text>
+        </TouchableOpacity>
+      </View>
       <Animated.ScrollView
         style={styles.scrollView}
         refreshControl={
@@ -219,9 +231,8 @@ export default function DebugScreen() {
         onScroll={scrollHandler}
         scrollEventThrottle={16}
       >
-        {/* Top padding: original 20 + status bar inset + app header height (56) + extra spacing */}
-          <View style={[styles.container, { paddingTop: 20 + insets.top + 56 + 16 }]}>
-            <View style={styles.debugContainer}>
+        <View style={[styles.container, { paddingTop: 16 }]}>
+          <View style={styles.debugContainer}>
             <Text style={styles.debugTitle}>🔍 Debug Info</Text>
             <View style={styles.debugRow}>
               <Text style={styles.debugLabel}>App Build:</Text>
@@ -399,6 +410,22 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#fff',
+  },
+  closeRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 8,
+    paddingBottom: 8,
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeIcon: {
+    fontSize: 18,
+    color: '#333',
+    lineHeight: 20,
   },
   scrollView: {
     flex: 1,
