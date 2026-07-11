@@ -1,26 +1,38 @@
 /**
  * SettingsScreen — main settings index, presented as a modal.
  *
- * Three sections:
- * 1. Navigation items: Orte (POI search) and Smart Home (Loxone config)
+ * Sections:
+ * 1. Allgemein (new): theme preference toggle (Erscheinungsbild)
+ * 2. Navigation items: Orte (POI search) and Smart Home (Loxone config)
  *    Each opens a dedicated sub-screen in the Settings stack.
- * 2. App Info (read-only): name, version, build, SDK
+ * 3. App Info (read-only): name, version, build, SDK
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { StyleSheet, View, Text, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { SharedStorage } from '../storage/SharedStorage';
-import { Colors, Spacing, Typography } from '../constants/designSystem';
+import { useColors } from '../hooks/useColors';
+import { useTheme } from '../contexts/ThemeContext';
+import type { ThemePreference } from '../storage/SharedStorage';
+import { Spacing, Typography, Shadows } from '../constants/designSystem';
 import { BUILD_NUMBER } from '../constants';
 
 // Expo SDK version — manual constant, Expo SDK is at 57
 const EXPO_SDK_VERSION = '57';
 const APP_VERSION = '1.0.0';
 
+const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
+  { value: 'system', label: 'Automatisch' },
+  { value: 'light', label: 'Hell' },
+  { value: 'dark', label: 'Dunkel' },
+];
+
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const colors = useColors();
+  const { preference, setPreference } = useTheme();
 
   const [locationName, setLocationName] = useState<string | null>(null);
   const [loxoneStatus, setLoxoneStatus] = useState<'configured' | 'enabled' | 'disabled' | 'none'>('none');
@@ -57,6 +69,90 @@ export default function SettingsScreen() {
     })();
   }, []);
 
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        safeArea: { flex: 1, backgroundColor: colors.background.primary },
+        closeRow: {
+          flexDirection: 'row',
+          paddingHorizontal: Spacing.sm,
+          paddingBottom: Spacing.sm,
+        },
+        closeButton: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+        closeIcon: { fontSize: 18, color: colors.label.primary, lineHeight: 20 },
+        content: {
+          paddingHorizontal: Spacing.screenHorizontal,
+          paddingBottom: Spacing.lg,
+        },
+        title: { ...Typography.title2, color: colors.label.primary, marginBottom: Spacing.lg },
+        section: {
+          backgroundColor: colors.background.secondary,
+          borderRadius: 12,
+          paddingHorizontal: Spacing.md,
+          paddingVertical: Spacing.sm,
+          marginBottom: Spacing.lg,
+        },
+        sectionHeader: {
+          ...Typography.footnote,
+          color: colors.label.secondary,
+          paddingVertical: Spacing.sm,
+          textTransform: 'uppercase',
+          letterSpacing: 0.5,
+        },
+        menuGroup: {
+          backgroundColor: colors.background.secondary,
+          borderRadius: 12,
+          marginBottom: Spacing.lg,
+          overflow: 'hidden',
+        },
+        menuItem: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingHorizontal: Spacing.md,
+          paddingVertical: Spacing.md,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: colors.separator.nonOpaque,
+        },
+        menuItemLast: { borderBottomWidth: 0 },
+        menuItemPressed: { backgroundColor: colors.fill.tertiary },
+        menuIcon: { fontSize: 22, marginRight: Spacing.md },
+        menuText: { flex: 1 },
+        menuTitle: { ...Typography.body, color: colors.label.primary, fontWeight: '500' },
+        menuSubtitle: { ...Typography.caption1, color: colors.label.secondary, marginTop: 2 },
+        menuChevron: { fontSize: 24, color: colors.label.tertiary, marginLeft: Spacing.sm },
+        themeRow: {
+          paddingHorizontal: Spacing.md,
+          paddingVertical: Spacing.md,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: colors.separator.nonOpaque,
+        },
+        themeRowLast: { borderBottomWidth: 0 },
+        themeLabel: {
+          ...Typography.body,
+          color: colors.label.primary,
+          fontWeight: '500',
+          marginBottom: Spacing.sm,
+        },
+        row: {
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          paddingVertical: Spacing.sm,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: colors.separator.nonOpaque,
+        },
+        rowLabel: { ...Typography.body, color: colors.label.primary },
+        rowValue: {
+          ...Typography.body,
+          color: colors.label.secondary,
+          flex: 1,
+          textAlign: 'right',
+          marginLeft: Spacing.md,
+        },
+      }),
+    [colors],
+  );
+
   const locationSubtitle = locationName ?? 'Nicht konfiguriert';
   const loxoneSubtitle =
     loxoneStatus === 'enabled'
@@ -82,6 +178,21 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>Einstellungen</Text>
 
+        {/* Allgemein (theme + future general settings) */}
+        <View style={styles.menuGroup}>
+          <Text style={[styles.sectionHeader, { paddingHorizontal: Spacing.md, marginTop: Spacing.sm }]}>
+            Allgemein
+          </Text>
+          <View style={styles.themeRow}>
+            <Text style={styles.themeLabel}>Erscheinungsbild</Text>
+            <SegmentedControl
+              options={THEME_OPTIONS}
+              value={preference}
+              onChange={setPreference}
+            />
+          </View>
+        </View>
+
         {/* Navigation items */}
         <View style={styles.menuGroup}>
           <MenuItem
@@ -101,7 +212,7 @@ export default function SettingsScreen() {
 
         {/* App Info */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>App Info</Text>
+          <Text style={styles.sectionHeader}>App Info</Text>
           <Row label="Name" value="Meteoblick" />
           <Row label="Version" value={APP_VERSION} />
           <Row label="Build" value={BUILD_NUMBER} />
@@ -125,6 +236,7 @@ function MenuItem({
   onPress: () => void;
   isLast?: boolean;
 }) {
+  const styles = useSettingsScreenStyles();
   return (
     <Pressable
       onPress={onPress}
@@ -147,6 +259,7 @@ function MenuItem({
 }
 
 function Row({ label, value }: { label: string; value: string }) {
+  const styles = useSettingsScreenStyles();
   return (
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
@@ -157,107 +270,132 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: Colors.background.primary,
-  },
-  closeRow: {
+/**
+ * SegmentedControl — iOS-style inline toggle, kept private to this screen.
+ * Single-use today; if reused elsewhere, promote to src/components/.
+ *
+ * Visual: 3 segments in a rounded-rect container. Active segment has the
+ * theme background primary fill + a subtle shadow for the iOS "lift" effect.
+ */
+function SegmentedControl<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  const colors = useColors();
+  return (
+    <View
+      style={[
+        segStyles.container,
+        { backgroundColor: colors.fill.primary },
+      ]}
+      accessibilityRole="radiogroup"
+    >
+      {options.map((opt) => {
+        const active = opt.value === value;
+        return (
+          <Pressable
+            key={opt.value}
+            onPress={() => onChange(opt.value)}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={opt.label}
+            style={[
+              segStyles.segment,
+              active && [
+                segStyles.segmentActive,
+                { backgroundColor: colors.background.primary, ...Shadows.sm },
+              ],
+            ]}
+          >
+            <Text
+              style={[
+                segStyles.segmentLabel,
+                {
+                  color: active ? colors.label.primary : colors.label.secondary,
+                  fontWeight: active ? '600' : '500',
+                },
+              ]}
+              numberOfLines={1}
+            >
+              {opt.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/**
+ * useSettingsScreenStyles — shared theme-aware style bundle for MenuItem
+ * and Row. Both sub-components render in the parent's tree so they inherit
+ * the ThemeProvider; calling this hook at the top of each render keeps
+ * hook order consistent (the previous wrapper function used
+ * `useMemo(() => …, [])`, which skipped hook execution on re-renders and
+ * tripped React's "Rendered fewer hooks" check).
+ */
+function useSettingsScreenStyles() {
+  const colors = useColors();
+  return useMemo(
+    () =>
+      StyleSheet.create({
+        menuItem: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingHorizontal: Spacing.md,
+          paddingVertical: Spacing.md,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: colors.separator.nonOpaque,
+        },
+        menuItemLast: { borderBottomWidth: 0 },
+        menuItemPressed: { backgroundColor: colors.fill.tertiary },
+        menuIcon: { fontSize: 22, marginRight: Spacing.md },
+        menuText: { flex: 1 },
+        menuTitle: { ...Typography.body, color: colors.label.primary, fontWeight: '500' },
+        menuSubtitle: { ...Typography.caption1, color: colors.label.secondary, marginTop: 2 },
+        menuChevron: { fontSize: 24, color: colors.label.tertiary, marginLeft: Spacing.sm },
+        row: {
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          paddingVertical: Spacing.sm,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: colors.separator.nonOpaque,
+        },
+        rowLabel: { ...Typography.body, color: colors.label.primary },
+        rowValue: {
+          ...Typography.body,
+          color: colors.label.secondary,
+          flex: 1,
+          textAlign: 'right',
+          marginLeft: Spacing.md,
+        },
+      }),
+    [colors],
+  );
+}
+
+const segStyles = StyleSheet.create({
+  container: {
     flexDirection: 'row',
-    paddingHorizontal: Spacing.sm,
-    paddingBottom: Spacing.sm,
+    borderRadius: 9,
+    padding: 2,
   },
-  closeButton: {
-    width: 32,
-    height: 32,
+  segment: {
+    flex: 1,
+    paddingVertical: 7,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 7,
   },
-  closeIcon: {
-    fontSize: 18,
-    color: Colors.label.primary,
-    lineHeight: 20,
-  },
-  content: {
-    paddingHorizontal: Spacing.screenHorizontal,
-    paddingBottom: Spacing.lg,
-  },
-  title: {
-    ...Typography.title2,
-    color: Colors.label.primary,
-    marginBottom: Spacing.lg,
-  },
-  menuGroup: {
-    backgroundColor: Colors.background.secondary,
-    borderRadius: 12,
-    marginBottom: Spacing.lg,
-    overflow: 'hidden',
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.separator.nonOpaque,
-  },
-  menuItemLast: {
-    borderBottomWidth: 0,
-  },
-  menuItemPressed: {
-    backgroundColor: Colors.fill.tertiary,
-  },
-  menuIcon: {
-    fontSize: 22,
-    marginRight: Spacing.md,
-  },
-  menuText: {
-    flex: 1,
-  },
-  menuTitle: {
-    ...Typography.body,
-    color: Colors.label.primary,
-    fontWeight: '500',
-  },
-  menuSubtitle: {
-    ...Typography.caption1,
-    color: Colors.label.secondary,
-    marginTop: 2,
-  },
-  menuChevron: {
-    fontSize: 24,
-    color: Colors.label.tertiary,
-    marginLeft: Spacing.sm,
-  },
-  section: {
-    backgroundColor: Colors.background.secondary,
-    borderRadius: 12,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    marginBottom: Spacing.lg,
-  },
-  sectionTitle: {
+  segmentActive: {},
+  segmentLabel: {
     ...Typography.subheadline,
-    color: Colors.label.secondary,
-    paddingVertical: Spacing.sm,
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: Spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.separator.nonOpaque,
-  },
-  rowLabel: {
-    ...Typography.body,
-    color: Colors.label.primary,
-  },
-  rowValue: {
-    ...Typography.body,
-    color: Colors.label.secondary,
-    flex: 1,
-    textAlign: 'right',
-    marginLeft: Spacing.md,
+    textAlign: 'center',
   },
 });

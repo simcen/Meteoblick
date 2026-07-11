@@ -14,7 +14,7 @@ import { Platform, StyleSheet } from 'react-native';
 // COLORS - iOS System Colors (Semantic)
 // ============================================================================
 
-export const Colors = {
+export const lightColors = {
   // Background Colors
   background: {
     primary: '#FFFFFF',           // systemBackground
@@ -61,6 +61,48 @@ export const Colors = {
     yellow: '#FFCC00',            // systemYellow
   },
 } as const;
+
+export const darkColors: Palette = {
+  background: {
+    primary: '#000000',           // systemBackground
+    secondary: '#1C1C1E',         // secondarySystemBackground
+    tertiary: '#2C2C2E',          // tertiarySystemBackground
+    grouped: '#000000',           // systemGroupedBackground
+  },
+  label: {
+    primary: '#FFFFFF',           // label
+    secondary: '#EBEBF599',       // secondaryLabel (60% opacity)
+    tertiary: '#EBEBF54C',        // tertiaryLabel (30% opacity)
+    quaternary: '#EBEBF528',      // quaternaryLabel (18% opacity)
+  },
+  fill: {
+    primary: '#7878805C',         // systemFill (20% opacity)
+    secondary: '#78788052',       // secondarySystemFill (16% opacity)
+    tertiary: '#7676803D',        // tertiarySystemFill (12% opacity)
+    quaternary: '#74748028',      // quaternarySystemFill (8% opacity)
+  },
+  separator: {
+    opaque: '#38383A',            // separator
+    nonOpaque: '#54545899',       // opaqueSeparator
+  },
+  tint: '#0A84FF',                // systemBlue (dark)
+  gradientStart: '#58BEF6',      // Brand gradient — unchanged
+  gradientEnd: '#3366CC',
+  accent: {
+    blue: '#0A84FF',              // systemBlue
+    green: '#30D158',             // systemGreen
+    red: '#FF453A',               // systemRed
+    orange: '#FF9F0A',            // systemOrange
+    yellow: '#FFD60A',            // systemYellow
+  },
+};
+
+export type Palette = typeof lightColors;
+
+// Back-compat shim — kept so call sites that still reference `Colors.*`
+// resolve to the light palette. Removed after all consumers migrate to
+// `useColors()` in the dark-mode refactor.
+export const Colors = lightColors;
 
 // ============================================================================
 // TYPOGRAPHY - SF Pro

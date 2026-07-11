@@ -1,14 +1,17 @@
 // MUST be first import — gesture-handler monkey-patches internals on import.
 import 'react-native-gesture-handler';
 
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, DarkTheme, Theme } from '@react-navigation/native';
 import { createNativeBottomTabNavigator } from '@bottom-tabs/react-navigation';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { createStackNavigator } from '@react-navigation/stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { StatusBar } from 'expo-status-bar';
+import { useMemo } from 'react';
 import { View } from 'react-native';
 import { AppProvider } from '../src/providers/AppProvider';
+import { ThemeProvider, useTheme } from '../src/contexts/ThemeContext';
 import { ScrollProvider, useScrollContext } from '../src/contexts/ScrollContext';
 import { AppHeader } from '../src/components/AppHeader';
 import { DrawerContent } from '../src/components/DrawerContent';
@@ -135,13 +138,45 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AppProvider>
         <SafeAreaProvider>
-          <ScrollProvider>
-            <NavigationContainer>
-              <Shell />
-            </NavigationContainer>
-          </ScrollProvider>
+          <ThemeProvider>
+            <ThemedShell />
+          </ThemeProvider>
         </SafeAreaProvider>
       </AppProvider>
     </GestureHandlerRootView>
+  );
+}
+
+// ThemedShell reads the resolved theme and wires StatusBar + NavigationContainer.
+// Kept separate so it can call useTheme() (which requires ThemeProvider above).
+function ThemedShell() {
+  const { effectiveScheme, colors } = useTheme();
+
+  const navTheme = useMemo<Theme>(() => {
+    const base = effectiveScheme === 'dark' ? DarkTheme : DefaultTheme;
+    return {
+      ...base,
+      dark: effectiveScheme === 'dark',
+      colors: {
+        ...base.colors,
+        primary: colors.tint,
+        background: colors.background.primary,
+        card: colors.background.secondary,
+        text: colors.label.primary,
+        border: colors.separator.opaque,
+        notification: colors.accent.red,
+      },
+    };
+  }, [effectiveScheme, colors]);
+
+  return (
+    <>
+      <StatusBar style={effectiveScheme === 'dark' ? 'light' : 'dark'} />
+      <ScrollProvider>
+        <NavigationContainer theme={navTheme}>
+          <Shell />
+        </NavigationContainer>
+      </ScrollProvider>
+    </>
   );
 }

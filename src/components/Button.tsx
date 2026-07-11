@@ -7,7 +7,8 @@ import {
   ViewStyle,
   TextStyle,
 } from 'react-native';
-import { Colors, Typography, Layout, Shadows } from '../constants/designSystem';
+import { Typography, Layout, Shadows } from '../constants/designSystem';
+import { useColors } from '../hooks/useColors';
 
 interface ButtonProps {
   title: string;
@@ -39,10 +40,12 @@ export function Button({
   style,
   textStyle,
 }: ButtonProps) {
+  const colors = useColors();
+
   const buttonStyle = [
     styles.base,
-    variant === 'primary' && styles.primary,
-    variant === 'secondary' && styles.secondary,
+    variant === 'primary' && { backgroundColor: colors.tint, ...Shadows.sm },
+    variant === 'secondary' && { backgroundColor: colors.fill.secondary },
     variant === 'text' && styles.text,
     fullWidth && styles.fullWidth,
     (disabled || loading) && styles.disabled,
@@ -51,9 +54,9 @@ export function Button({
 
   const textStyleCombined = [
     styles.baseText,
-    variant === 'primary' && styles.primaryText,
-    variant === 'secondary' && styles.secondaryText,
-    variant === 'text' && styles.textText,
+    variant === 'primary' && { color: colors.background.primary },
+    variant === 'secondary' && { color: colors.label.primary },
+    variant === 'text' && { color: colors.tint },
     (disabled || loading) && styles.disabledText,
     textStyle,
   ];
@@ -67,7 +70,7 @@ export function Button({
     >
       {loading ? (
         <ActivityIndicator
-          color={variant === 'primary' ? Colors.background.primary : Colors.tint}
+          color={variant === 'primary' ? colors.background.primary : colors.tint}
         />
       ) : (
         <Text style={textStyleCombined}>{title}</Text>
@@ -85,32 +88,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
 
-  // Primary Variant (Tinted)
-  primary: {
-    backgroundColor: Colors.tint,
-    ...Shadows.sm,
-  },
-  primaryText: {
-    color: Colors.background.primary,
-    ...Typography.headline,
-  },
-
-  // Secondary Variant (Gray Fill)
-  secondary: {
-    backgroundColor: Colors.fill.secondary,
-  },
-  secondaryText: {
-    color: Colors.label.primary,
-    ...Typography.headline,
-  },
-
   // Text Variant (No Background)
   text: {
     backgroundColor: 'transparent',
-  },
-  textText: {
-    color: Colors.tint,
-    ...Typography.headline,
   },
 
   // Full Width

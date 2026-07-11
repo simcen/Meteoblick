@@ -11,7 +11,7 @@
  * On save, persists the sensor name as `temperatureSensorName` so the
  * read-only SmartHomeScreen can display it without re-fetching.
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -30,13 +30,127 @@ import { LoxoneAPI, type LoxoneTemperatureSensor } from '../api/loxone';
 import { useWeather } from '../providers/WeatherContext';
 import { useScrollContext } from '../contexts/ScrollContext';
 import { Button } from '../components/Button';
-import { Colors, Typography, Spacing, Layout } from '../constants/designSystem';
+import { Typography, Spacing, Layout } from '../constants/designSystem';
+import { useColors } from '../hooks/useColors';
 
 export default function LoxoneConfigScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const colors = useColors();
   const { refresh: refreshWeather } = useWeather();
   const { sharedScrollY } = useScrollContext();
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        safeArea: { flex: 1, backgroundColor: colors.background.primary },
+        closeRow: {
+          flexDirection: 'row',
+          paddingHorizontal: Spacing.sm,
+          paddingBottom: Spacing.sm,
+        },
+        closeButton: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+        closeIcon: { fontSize: 18, color: colors.label.primary, lineHeight: 20 },
+        scrollView: { flex: 1 },
+        contentContainer: { padding: Spacing.screenHorizontal, paddingBottom: Spacing.lg },
+        header: { marginBottom: Spacing.lg },
+        title: { ...Typography.title2, color: colors.label.primary, marginBottom: Spacing.xs },
+        subtitle: { ...Typography.subheadline, color: colors.label.secondary },
+        section: { marginBottom: Spacing.xl },
+        sectionTitle: {
+          ...Typography.headline,
+          color: colors.label.primary,
+          marginBottom: Spacing.md,
+        },
+        toggleRow: {
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          paddingVertical: Spacing.sm,
+        },
+        toggleLabel: { flex: 1, marginRight: Spacing.md },
+        label: { ...Typography.body, color: colors.label.primary, marginBottom: Spacing.xs },
+        hint: { ...Typography.caption1, color: colors.label.secondary },
+        inputLabel: {
+          ...Typography.subheadline,
+          color: colors.label.primary,
+          marginBottom: Spacing.xs,
+          marginTop: Spacing.md,
+        },
+        input: {
+          ...Typography.body,
+          backgroundColor: colors.background.secondary,
+          borderRadius: Layout.radius.md,
+          borderWidth: Layout.border.normal,
+          borderColor: colors.separator.opaque,
+          paddingHorizontal: Spacing.md,
+          paddingVertical: Spacing.sm,
+          marginBottom: Spacing.md,
+          color: colors.label.primary,
+        },
+        sensorList: { marginTop: Spacing.md },
+        sensorListTitle: { ...Typography.subheadline, color: colors.label.secondary, marginBottom: Spacing.sm },
+        sensorItem: {
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          backgroundColor: colors.background.secondary,
+          borderRadius: Layout.radius.md,
+          borderWidth: Layout.border.normal,
+          borderColor: colors.separator.opaque,
+          padding: Spacing.md,
+          marginBottom: Spacing.sm,
+        },
+        sensorItemSelected: {
+          borderColor: colors.tint,
+          borderWidth: 2,
+          backgroundColor: `${colors.tint}10`,
+        },
+        sensorInfo: { flex: 1 },
+        sensorName: { ...Typography.body, color: colors.label.primary, marginBottom: Spacing.xs },
+        sensorDetails: { ...Typography.caption1, color: colors.label.secondary },
+        checkmark: { fontSize: 20, color: colors.tint, marginLeft: Spacing.sm },
+        actions: { marginTop: Spacing.lg, gap: Spacing.md },
+        infoSection: {
+          marginTop: Spacing.xl,
+          padding: Spacing.md,
+          backgroundColor: colors.background.secondary,
+          borderRadius: Layout.radius.md,
+        },
+        infoTitle: { ...Typography.subheadline, color: colors.label.primary, marginBottom: Spacing.xs },
+        infoText: { ...Typography.caption1, color: colors.label.secondary, lineHeight: 18 },
+        loadingHint: {
+          marginTop: Spacing.md,
+          padding: Spacing.md,
+          backgroundColor: `${colors.tint}15`,
+          borderRadius: Layout.radius.md,
+          borderLeftWidth: 3,
+          borderLeftColor: colors.tint,
+        },
+        loadingHintText: { ...Typography.caption1, color: colors.label.secondary, lineHeight: 18 },
+        sectionHeader: {
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          paddingVertical: Spacing.sm,
+        },
+        sectionSummary: { ...Typography.subheadline, color: colors.tint, fontWeight: '600' },
+        previewRow: { marginTop: Spacing.xs },
+        previewLoading: {
+          ...Typography.caption1,
+          color: colors.label.secondary,
+          fontStyle: 'italic',
+        },
+        previewTemp: { ...Typography.caption1, color: colors.tint, fontWeight: '600' },
+        previewError: {
+          ...Typography.caption1,
+          color: colors.accent.red,
+          fontStyle: 'italic',
+        },
+      }),
+    [colors],
+  );
+
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (e) => {
       sharedScrollY.value = e.contentOffset.y;
@@ -287,8 +401,8 @@ export default function LoxoneConfigScreen() {
                   }
                 })();
               }}
-              trackColor={{ false: Colors.separator.opaque, true: Colors.tint }}
-              thumbColor={Colors.background.primary}
+              trackColor={{ false: colors.separator.opaque, true: colors.tint }}
+              thumbColor={colors.background.primary}
             />
           </View>
         </View>
@@ -315,6 +429,7 @@ export default function LoxoneConfigScreen() {
                 value={cloudAddress}
                 onChangeText={setCloudAddress}
                 placeholder="z.B. 504F94A1874F"
+                placeholderTextColor={colors.label.tertiary}
                 autoCapitalize="characters"
                 editable={!loading}
               />
@@ -325,6 +440,7 @@ export default function LoxoneConfigScreen() {
                 value={username}
                 onChangeText={setUsername}
                 placeholder="Miniserver Benutzer"
+                placeholderTextColor={colors.label.tertiary}
                 autoCapitalize="none"
                 autoCorrect={false}
                 editable={!loading}
@@ -336,6 +452,7 @@ export default function LoxoneConfigScreen() {
                 value={password}
                 onChangeText={setPassword}
                 placeholder="Miniserver Passwort"
+                placeholderTextColor={colors.label.tertiary}
                 secureTextEntry
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -400,6 +517,7 @@ export default function LoxoneConfigScreen() {
                       value={sensorSearchQuery}
                       onChangeText={setSensorSearchQuery}
                       placeholder="🔍 Sensor suchen (Name, Raum, Typ)..."
+                      placeholderTextColor={colors.label.tertiary}
                       autoCapitalize="none"
                       autoCorrect={false}
                     />
@@ -503,192 +621,3 @@ export default function LoxoneConfigScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: Colors.background.primary,
-  },
-  closeRow: {
-    flexDirection: 'row',
-    paddingHorizontal: Spacing.sm,
-    paddingBottom: Spacing.sm,
-  },
-  closeButton: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  closeIcon: {
-    fontSize: 18,
-    color: Colors.label.primary,
-    lineHeight: 20,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  contentContainer: {
-    padding: Spacing.screenHorizontal,
-    paddingBottom: Spacing.lg,
-  },
-  header: {
-    marginBottom: Spacing.lg,
-  },
-  title: {
-    ...Typography.title2,
-    color: Colors.label.primary,
-    marginBottom: Spacing.xs,
-  },
-  subtitle: {
-    ...Typography.subheadline,
-    color: Colors.label.secondary,
-  },
-  section: {
-    marginBottom: Spacing.xl,
-  },
-  sectionTitle: {
-    ...Typography.headline,
-    color: Colors.label.primary,
-    marginBottom: Spacing.md,
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: Spacing.sm,
-  },
-  toggleLabel: {
-    flex: 1,
-    marginRight: Spacing.md,
-  },
-  label: {
-    ...Typography.body,
-    color: Colors.label.primary,
-    marginBottom: Spacing.xs,
-  },
-  hint: {
-    ...Typography.caption1,
-    color: Colors.label.secondary,
-  },
-  inputLabel: {
-    ...Typography.subheadline,
-    color: Colors.label.primary,
-    marginBottom: Spacing.xs,
-    marginTop: Spacing.md,
-  },
-  input: {
-    ...Typography.body,
-    backgroundColor: Colors.background.secondary,
-    borderRadius: Layout.radius.md,
-    borderWidth: Layout.border.normal,
-    borderColor: Colors.separator.opaque,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    marginBottom: Spacing.md,
-    color: Colors.label.primary,
-  },
-  sensorList: {
-    marginTop: Spacing.md,
-  },
-  sensorListTitle: {
-    ...Typography.subheadline,
-    color: Colors.label.secondary,
-    marginBottom: Spacing.sm,
-  },
-  sensorItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: Colors.background.secondary,
-    borderRadius: Layout.radius.md,
-    borderWidth: Layout.border.normal,
-    borderColor: Colors.separator.opaque,
-    padding: Spacing.md,
-    marginBottom: Spacing.sm,
-  },
-  sensorItemSelected: {
-    borderColor: Colors.tint,
-    borderWidth: 2,
-    backgroundColor: `${Colors.tint}10`,
-  },
-  sensorInfo: {
-    flex: 1,
-  },
-  sensorName: {
-    ...Typography.body,
-    color: Colors.label.primary,
-    marginBottom: Spacing.xs,
-  },
-  sensorDetails: {
-    ...Typography.caption1,
-    color: Colors.label.secondary,
-  },
-  checkmark: {
-    fontSize: 20,
-    color: Colors.tint,
-    marginLeft: Spacing.sm,
-  },
-  actions: {
-    marginTop: Spacing.lg,
-    gap: Spacing.md,
-  },
-  infoSection: {
-    marginTop: Spacing.xl,
-    padding: Spacing.md,
-    backgroundColor: Colors.background.secondary,
-    borderRadius: Layout.radius.md,
-  },
-  infoTitle: {
-    ...Typography.subheadline,
-    color: Colors.label.primary,
-    marginBottom: Spacing.xs,
-  },
-  infoText: {
-    ...Typography.caption1,
-    color: Colors.label.secondary,
-    lineHeight: 18,
-  },
-  loadingHint: {
-    marginTop: Spacing.md,
-    padding: Spacing.md,
-    backgroundColor: `${Colors.tint}15`,
-    borderRadius: Layout.radius.md,
-    borderLeftWidth: 3,
-    borderLeftColor: Colors.tint,
-  },
-  loadingHintText: {
-    ...Typography.caption1,
-    color: Colors.label.secondary,
-    lineHeight: 18,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: Spacing.sm,
-  },
-  sectionSummary: {
-    ...Typography.subheadline,
-    color: Colors.tint,
-    fontWeight: '600',
-  },
-  previewRow: {
-    marginTop: Spacing.xs,
-  },
-  previewLoading: {
-    ...Typography.caption1,
-    color: Colors.label.secondary,
-    fontStyle: 'italic',
-  },
-  previewTemp: {
-    ...Typography.caption1,
-    color: Colors.tint,
-    fontWeight: '600',
-  },
-  previewError: {
-    ...Typography.caption1,
-    color: '#FF6B6B',
-    fontStyle: 'italic',
-  },
-});

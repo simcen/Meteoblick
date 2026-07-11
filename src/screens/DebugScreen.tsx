@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, RefreshControl } from 'react-native';
 import Animated, { useAnimatedScrollHandler } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,12 +10,59 @@ import { updateWidget } from '../widgets/widgetManager';
 import { Button } from '../components/Button';
 import { BUILD_NUMBER, API_BASE_URL } from '../constants';
 import { useScrollContext } from '../contexts/ScrollContext';
+import { useColors } from '../hooks/useColors';
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as TaskManager from 'expo-task-manager';
 
 export default function DebugScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const colors = useColors();
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        safeArea: { flex: 1, backgroundColor: colors.background.primary },
+        closeRow: { flexDirection: 'row', paddingHorizontal: 8, paddingBottom: 8 },
+        closeButton: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+        closeIcon: { fontSize: 18, color: colors.label.primary, lineHeight: 20 },
+        scrollView: { flex: 1 },
+        container: { flex: 1, padding: 20 },
+        debugContainer: {
+          backgroundColor: colors.background.secondary,
+          padding: 16,
+          borderRadius: 8,
+          marginBottom: 16,
+        },
+        debugTitle: {
+          fontSize: 18,
+          fontWeight: 'bold',
+          marginBottom: 16,
+          color: colors.label.primary,
+        },
+        debugSectionTitle: {
+          fontSize: 16,
+          fontWeight: '600',
+          marginTop: 16,
+          marginBottom: 8,
+          color: colors.label.secondary,
+        },
+        debugRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 },
+        debugLabel: { fontSize: 14, color: colors.label.tertiary, flex: 1 },
+        debugValue: {
+          fontSize: 14,
+          color: colors.label.primary,
+          fontWeight: '500',
+          flex: 1,
+          textAlign: 'right',
+        },
+        uuidText: { fontSize: 10, fontFamily: 'Courier' },
+        debugButton: { marginTop: 16 },
+        labelWithIcon: { flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 },
+        infoIcon: { fontSize: 14, opacity: 0.6 },
+      }),
+    [colors],
+  );
   const { sharedScrollY } = useScrollContext();
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (e) => {
@@ -405,86 +452,3 @@ export default function DebugScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  closeRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 8,
-    paddingBottom: 8,
-  },
-  closeButton: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  closeIcon: {
-    fontSize: 18,
-    color: '#333',
-    lineHeight: 20,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  container: {
-    flex: 1,
-    padding: 20,
-  },
-  debugContainer: {
-    backgroundColor: '#f8f8f8',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 16,
-  },
-  debugTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 16,
-    color: '#333',
-  },
-  debugSectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginTop: 16,
-    marginBottom: 8,
-    color: '#555',
-  },
-  debugRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 6,
-  },
-  debugLabel: {
-    fontSize: 14,
-    color: '#666',
-    flex: 1,
-  },
-  debugValue: {
-    fontSize: 14,
-    color: '#333',
-    fontWeight: '500',
-    flex: 1,
-    textAlign: 'right',
-  },
-  uuidText: {
-    fontSize: 10,
-    fontFamily: 'Courier',
-  },
-  debugButton: {
-    marginTop: 16,
-  },
-  labelWithIcon: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    flex: 1,
-  },
-  infoIcon: {
-    fontSize: 14,
-    opacity: 0.6,
-  },
-});

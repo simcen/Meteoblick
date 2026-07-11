@@ -7,7 +7,7 @@
  *
  * Configuration UI lives in LoxoneConfigScreen (reached via Settings).
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -22,11 +22,13 @@ import { SharedStorage } from '../storage/SharedStorage';
 import { useWeather } from '../providers/WeatherContext';
 import { useScrollContext } from '../contexts/ScrollContext';
 import { Button } from '../components/Button';
-import { Colors, Typography, Spacing, Layout, ComponentStyles } from '../constants/designSystem';
+import { Typography, Spacing, Layout } from '../constants/designSystem';
+import { useColors } from '../hooks/useColors';
 
 export default function SmartHomeScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const colors = useColors();
   const { loxoneTemp, loxoneTimestamp, isFetching: refreshing, refresh } = useWeather();
   const { sharedScrollY } = useScrollContext();
   const scrollHandler = useAnimatedScrollHandler({
@@ -40,6 +42,61 @@ export default function SmartHomeScreen() {
         sharedScrollY.value = 0;
       };
     }, [sharedScrollY])
+  );
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        safeArea: { flex: 1, backgroundColor: colors.background.primary },
+        scrollView: { flex: 1 },
+        contentContainer: {
+          padding: Spacing.screenHorizontal,
+          paddingBottom: Spacing.lg,
+        },
+        title: { ...Typography.title2, color: colors.label.primary, marginBottom: Spacing.xs },
+        subtitle: { ...Typography.subheadline, color: colors.label.secondary, marginBottom: Spacing.lg },
+        card: {
+          backgroundColor: colors.background.primary,
+          borderRadius: Layout.radius.md,
+          padding: Spacing.md,
+          marginBottom: Spacing.md,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.05,
+          shadowRadius: 2,
+          elevation: 1,
+        },
+        cardTitle: { ...Typography.headline, color: colors.label.primary, marginBottom: Spacing.md },
+        temperature: {
+          fontSize: 48,
+          fontWeight: '700',
+          color: colors.label.primary,
+          marginBottom: Spacing.xs,
+        },
+        temperaturePlaceholder: {
+          fontSize: 48,
+          fontWeight: '300',
+          color: colors.label.tertiary,
+          marginBottom: Spacing.xs,
+        },
+        sensorName: { ...Typography.subheadline, color: colors.label.secondary, marginBottom: Spacing.md },
+        timestamp: { ...Typography.footnote, color: colors.label.tertiary },
+        editButton: { marginTop: Spacing.md, paddingVertical: Spacing.sm, alignItems: 'center' },
+        editButtonText: { ...Typography.subheadline, color: colors.tint, fontWeight: '600' },
+        emptyCard: {
+          backgroundColor: colors.background.primary,
+          borderRadius: Layout.radius.md,
+          padding: Spacing.md,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.05,
+          shadowRadius: 2,
+          elevation: 1,
+        },
+        emptyTitle: { ...Typography.headline, color: colors.label.primary, marginBottom: Spacing.sm },
+        emptyBody: { ...Typography.subheadline, color: colors.label.secondary, marginBottom: Spacing.lg },
+      }),
+    [colors],
   );
 
   const [enabled, setEnabled] = useState(false);
@@ -151,118 +208,39 @@ export default function SmartHomeScreen() {
 }
 
 function Row({ label, value }: { label: string; value: string }) {
+  // `styles` is captured from the module scope below — but Row is rendered
+  // inside SmartHomeScreen which already established the theme. Re-import
+  // from the same useMemo via closure by passing styles as a prop would be
+  // awkward; instead Row reads from the local styles via a shared ref.
+  // Simpler: define Row inline by re-reading from useColors + Typography/Spacing.
+  const colors = useColors();
+  const rowStyles = useMemo(
+    () =>
+      StyleSheet.create({
+        row: {
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          paddingVertical: Spacing.sm,
+          borderBottomWidth: Layout.border.thin,
+          borderBottomColor: colors.separator.opaque,
+        },
+        rowLabel: { ...Typography.subheadline, color: colors.label.secondary },
+        rowValue: {
+          ...Typography.body,
+          fontWeight: '500',
+          color: colors.label.primary,
+          flex: 1,
+          textAlign: 'right',
+          marginLeft: Spacing.md,
+        },
+      }),
+    [colors],
+  );
   return (
-    <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={styles.rowValue} numberOfLines={1}>{value}</Text>
+    <View style={rowStyles.row}>
+      <Text style={rowStyles.rowLabel}>{label}</Text>
+      <Text style={rowStyles.rowValue} numberOfLines={1}>{value}</Text>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: Colors.background.primary,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  contentContainer: {
-    padding: Spacing.screenHorizontal,
-    paddingBottom: Spacing.lg,
-  },
-  title: {
-    ...Typography.title2,
-    color: Colors.label.primary,
-    marginBottom: Spacing.xs,
-  },
-  subtitle: {
-    ...Typography.subheadline,
-    color: Colors.label.secondary,
-    marginBottom: Spacing.lg,
-  },
-  toggleCard: {
-    ...ComponentStyles.card,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-  },
-  toggleLabel: {
-    flex: 1,
-    marginRight: Spacing.md,
-  },
-  card: {
-    ...ComponentStyles.card,
-    marginBottom: Spacing.md,
-  },
-  cardTitle: {
-    ...Typography.headline,
-    color: Colors.label.primary,
-    marginBottom: Spacing.md,
-  },
-  temperature: {
-    fontSize: 48,
-    fontWeight: '700',
-    color: Colors.label.primary,
-    marginBottom: Spacing.xs,
-  },
-  temperaturePlaceholder: {
-    fontSize: 48,
-    fontWeight: '300',
-    color: Colors.label.tertiary,
-    marginBottom: Spacing.xs,
-  },
-  sensorName: {
-    ...Typography.subheadline,
-    color: Colors.label.secondary,
-    marginBottom: Spacing.md,
-  },
-  timestamp: {
-    ...Typography.footnote,
-    color: Colors.label.tertiary,
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: Spacing.sm,
-    borderBottomWidth: Layout.border.thin,
-    borderBottomColor: Colors.separator.opaque,
-  },
-  rowLabel: {
-    ...Typography.subheadline,
-    color: Colors.label.secondary,
-  },
-  rowValue: {
-    ...Typography.body,
-    fontWeight: '500',
-    color: Colors.label.primary,
-    flex: 1,
-    textAlign: 'right',
-    marginLeft: Spacing.md,
-  },
-  editButton: {
-    marginTop: Spacing.md,
-    paddingVertical: Spacing.sm,
-    alignItems: 'center',
-  },
-  editButtonText: {
-    ...Typography.subheadline,
-    color: Colors.tint,
-    fontWeight: '600',
-  },
-  emptyCard: {
-    ...ComponentStyles.card,
-  },
-  emptyTitle: {
-    ...Typography.headline,
-    color: Colors.label.primary,
-    marginBottom: Spacing.sm,
-  },
-  emptyBody: {
-    ...Typography.subheadline,
-    color: Colors.label.secondary,
-    marginBottom: Spacing.lg,
-  },
-});

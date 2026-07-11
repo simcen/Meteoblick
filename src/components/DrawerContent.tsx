@@ -7,25 +7,27 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { DrawerContentScrollView, DrawerItem } from '@react-navigation/drawer';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Spacing, Typography } from '../constants/designSystem';
+import { Spacing, Typography } from '../constants/designSystem';
+import { useColors } from '../hooks/useColors';
 
 export function DrawerContent(props: any) {
   const insets = useSafeAreaInsets();
+  const colors = useColors();
   return (
     <DrawerContentScrollView
       {...props}
       contentContainerStyle={[
         styles.container,
-        { paddingTop: insets.top + Spacing.lg },
+        { paddingTop: insets.top + Spacing.lg, backgroundColor: colors.background.primary },
       ]}
     >
       <View style={styles.header}>
-        <Text style={styles.appName}>Meteoblick</Text>
+        <Text style={[styles.appName, { color: colors.label.primary }]}>Meteoblick</Text>
       </View>
       <DrawerItem
         label="Settings"
         icon={({ size }: { size: number }) => (
-          <Text style={[styles.itemIcon, { fontSize: size }]}>⚙️</Text>
+          <Text style={[styles.itemIcon, { fontSize: size, color: colors.label.primary }]}>⚙️</Text>
         )}
         onPress={() => {
           // Close drawer first so it's hidden when the Settings modal slides in.
@@ -34,12 +36,12 @@ export function DrawerContent(props: any) {
           // navigate into the parent route and target the screen there.
           props.navigation.navigate('Main', { screen: 'Settings' });
         }}
-        labelStyle={styles.itemLabel}
+        labelStyle={[styles.itemLabel, { color: colors.label.primary }]}
       />
       <DrawerItem
         label="Debug"
         icon={({ size }: { size: number }) => (
-          <Text style={[styles.itemIcon, { fontSize: size }]}>🛠️</Text>
+          <Text style={[styles.itemIcon, { fontSize: size, color: colors.label.primary }]}>🛠️</Text>
         )}
         onPress={() => {
           props.navigation.closeDrawer();
@@ -47,7 +49,7 @@ export function DrawerContent(props: any) {
           // route and target the screen there.
           props.navigation.navigate('Main', { screen: 'Debug' });
         }}
-        labelStyle={styles.itemLabel}
+        labelStyle={[styles.itemLabel, { color: colors.label.primary }]}
       />
     </DrawerContentScrollView>
   );
@@ -56,7 +58,6 @@ export function DrawerContent(props: any) {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    backgroundColor: Colors.background.primary,
   },
   header: {
     paddingHorizontal: Spacing.md,
@@ -64,13 +65,10 @@ const styles = StyleSheet.create({
   },
   appName: {
     ...Typography.title3,
-    color: Colors.label.primary,
   },
   itemIcon: {
-    color: Colors.label.primary,
   },
   itemLabel: {
     ...Typography.body,
-    color: Colors.label.primary,
   },
 });

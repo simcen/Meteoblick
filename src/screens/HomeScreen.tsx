@@ -7,19 +7,101 @@
  *
  * Loxone temperature is included as a secondary row when available.
  */
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, RefreshControl, TouchableOpacity } from 'react-native';
 import Animated, { useAnimatedScrollHandler } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useScrollContext } from '../contexts/ScrollContext';
 import { useWeather } from '../providers/WeatherContext';
-import { Colors, Typography, Spacing, Layout, ComponentStyles } from '../constants/designSystem';
+import { Typography, Spacing, Layout } from '../constants/designSystem';
+import { useColors } from '../hooks/useColors';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const colors = useColors();
   const { weather: weatherData, loxoneTemp, loxoneTimestamp, isFetching: refreshing, refresh } = useWeather();
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        safeArea: { flex: 1, backgroundColor: colors.background.primary },
+        container: { flex: 1 },
+        contentContainer: {
+          paddingHorizontal: Spacing.screenHorizontal,
+          paddingBottom: Spacing.lg,
+        },
+        title: { ...Typography.title2, color: colors.label.primary, marginBottom: Spacing.md },
+        weatherCard: {
+          backgroundColor: colors.background.primary,
+          borderRadius: Layout.radius.md,
+          padding: Spacing.md,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.05,
+          shadowRadius: 2,
+          elevation: 1,
+        },
+        location: { ...Typography.title3, color: colors.label.primary, marginBottom: Spacing.md },
+        tempRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          marginBottom: Spacing.md,
+        },
+        tempBlock: { flex: 1, alignItems: 'center' },
+        tempDivider: {
+          width: StyleSheet.hairlineWidth,
+          backgroundColor: colors.separator.opaque,
+          alignSelf: 'stretch',
+          marginHorizontal: Spacing.md,
+        },
+        tempLabel: { ...Typography.caption1, color: colors.label.secondary, marginBottom: Spacing.xs },
+        tempValue: { fontSize: 36, fontWeight: '700', color: colors.label.primary },
+        detailRow: {
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          paddingVertical: Spacing.sm,
+          borderBottomWidth: Layout.border.thin,
+          borderBottomColor: colors.separator.opaque,
+        },
+        detailRowLast: {
+          // Niederschlag row: its own bottom border is dropped so the timestamp
+          // borderTopWidth below becomes the single divider between them.
+          borderBottomWidth: 0,
+        },
+        detailLabel: { ...Typography.subheadline, color: colors.label.secondary },
+        detailValue: { ...Typography.body, color: colors.label.primary, fontWeight: '500' },
+        timestamps: {
+          ...Typography.footnote,
+          color: colors.label.tertiary,
+          marginTop: Spacing.md,
+          paddingTop: Spacing.md,
+          borderTopWidth: Layout.border.thin,
+          borderTopColor: colors.separator.opaque,
+          lineHeight: 18,
+        },
+        changeLocationButton: {
+          marginTop: Spacing.lg,
+          paddingVertical: Spacing.md,
+          alignItems: 'center',
+        },
+        changeLocationText: { ...Typography.headline, color: colors.tint },
+        emptyCard: {
+          backgroundColor: colors.background.primary,
+          borderRadius: Layout.radius.md,
+          padding: Spacing.md,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.05,
+          shadowRadius: 2,
+          elevation: 1,
+        },
+        emptyTitle: { ...Typography.headline, color: colors.label.primary, marginBottom: Spacing.sm },
+        emptyBody: { ...Typography.subheadline, color: colors.label.secondary },
+      }),
+    [colors],
+  );
 
   const { sharedScrollY } = useScrollContext();
   const scrollHandler = useAnimatedScrollHandler({
@@ -116,106 +198,3 @@ export default function HomeScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: Colors.background.primary,
-  },
-  container: {
-    flex: 1,
-  },
-  contentContainer: {
-    paddingHorizontal: Spacing.screenHorizontal,
-    paddingBottom: Spacing.lg,
-  },
-  title: {
-    ...Typography.title2,
-    color: Colors.label.primary,
-    marginBottom: Spacing.md,
-  },
-  weatherCard: {
-    ...ComponentStyles.card,
-  },
-  location: {
-    ...Typography.title3,
-    color: Colors.label.primary,
-    marginBottom: Spacing.md,
-  },
-  tempRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-  },
-  tempBlock: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  tempDivider: {
-    width: StyleSheet.hairlineWidth,
-    backgroundColor: Colors.separator.opaque,
-    alignSelf: 'stretch',
-    marginHorizontal: Spacing.md,
-  },
-  tempLabel: {
-    ...Typography.caption1,
-    color: Colors.label.secondary,
-    marginBottom: Spacing.xs,
-  },
-  tempValue: {
-    fontSize: 36,
-    fontWeight: '700',
-    color: Colors.label.primary,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: Spacing.sm,
-    borderBottomWidth: Layout.border.thin,
-    borderBottomColor: Colors.separator.opaque,
-  },
-  detailRowLast: {
-    // Niederschlag row: its own bottom border is dropped so the timestamp
-    // borderTopWidth below becomes the single divider between them.
-    borderBottomWidth: 0,
-  },
-  detailLabel: {
-    ...Typography.subheadline,
-    color: Colors.label.secondary,
-  },
-  detailValue: {
-    ...Typography.body,
-    color: Colors.label.primary,
-    fontWeight: '500',
-  },
-  timestamps: {
-    ...Typography.footnote,
-    color: Colors.label.tertiary,
-    marginTop: Spacing.md,
-    paddingTop: Spacing.md,
-    borderTopWidth: Layout.border.thin,
-    borderTopColor: Colors.separator.opaque,
-    lineHeight: 18,
-  },
-  changeLocationButton: {
-    marginTop: Spacing.lg,
-    paddingVertical: Spacing.md,
-    alignItems: 'center',
-  },
-  changeLocationText: {
-    ...Typography.headline,
-    color: Colors.tint,
-  },
-  emptyCard: {
-    ...ComponentStyles.card,
-  },
-  emptyTitle: {
-    ...Typography.headline,
-    color: Colors.label.primary,
-    marginBottom: Spacing.sm,
-  },
-  emptyBody: {
-    ...Typography.subheadline,
-    color: Colors.label.secondary,
-  },
-});

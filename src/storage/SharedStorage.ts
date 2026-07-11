@@ -1,8 +1,12 @@
 import SharedGroupPreferences from 'react-native-shared-group-preferences';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { APP_GROUP_ID, POI_STORAGE_KEY, WEATHER_DATA_KEY, WIDGET_LAST_REFRESH_KEY, WIDGET_LOXONE_CONFIG_KEY, WIDGET_LOXONE_SENSOR_DATA_KEY, WIDGET_TIMELINE_CALLED_KEY, WIDGET_SNAPSHOT_WRITTEN_AT_KEY } from '../constants';
+import { APP_GROUP_ID, POI_STORAGE_KEY, WEATHER_DATA_KEY, WIDGET_LAST_REFRESH_KEY, WIDGET_LOXONE_CONFIG_KEY, WIDGET_LOXONE_SENSOR_DATA_KEY, WIDGET_TIMELINE_CALLED_KEY, WIDGET_SNAPSHOT_WRITTEN_AT_KEY, THEME_PREFERENCE_KEY } from '../constants';
 import type { WeatherData } from '../types/weather';
 import type { POI } from '../types/poi';
+
+export type ThemePreference = 'system' | 'light' | 'dark';
+
+const VALID_THEME_PREFERENCES: ThemePreference[] = ['system', 'light', 'dark'];
 
 const POI_CACHE_KEY = 'meteoblick_poi_cache';
 const POI_CACHE_TIMESTAMP_KEY = 'meteoblick_poi_cache_timestamp';
@@ -240,6 +244,33 @@ export const SharedStorage = {
     } catch (error) {
       console.error('Failed to read widget Loxone config:', error);
       return null;
+    }
+  },
+
+  // Theme preference (light/dark/system) — AsyncStorage only, not mirrored to widget.
+  // The widget uses a fixed brand gradient regardless of theme.
+  async getThemePreference(): Promise<ThemePreference> {
+    try {
+      const value = await AsyncStorage.getItem(THEME_PREFERENCE_KEY);
+      if (value && VALID_THEME_PREFERENCES.includes(value as ThemePreference)) {
+        return value as ThemePreference;
+      }
+      return 'system';
+    } catch (error) {
+      console.error('Failed to read theme preference:', error);
+      return 'system';
+    }
+  },
+
+  async setThemePreference(preference: ThemePreference): Promise<void> {
+    try {
+      if (!VALID_THEME_PREFERENCES.includes(preference)) {
+        throw new Error(`Invalid theme preference: ${preference}`);
+      }
+      await AsyncStorage.setItem(THEME_PREFERENCE_KEY, preference);
+    } catch (error) {
+      console.error('Failed to save theme preference:', error);
+      throw error;
     }
   },
 };
