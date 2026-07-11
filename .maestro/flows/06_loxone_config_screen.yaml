@@ -1,0 +1,19 @@
+# 06_loxone_config_screen.yaml — Settings → Smart Home → Loxone Config modal renders.
+appId: ch.meteoblick
+---
+- launchApp:
+    clearState: false
+- tapOn:
+    id: "hamburger-menu"
+- tapOn:
+    text: "Settings"
+- assertVisible:
+    text: "Einstellungen"
+- tapOn:
+    text: "Smart Home"
+- assertVisible:
+    text: "Smart Home Konfiguration"
+- assertVisible:
+    text: "Loxone aktivieren"
+- assertVisible:
+    text: "Cloud-Adresse (SNR)"

@@ -178,6 +178,7 @@ export function AppHeader({ scrollY, title = 'Meteoblick' }: AppHeaderProps) {
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           accessibilityRole="button"
           accessibilityLabel="Menü öffnen"
+          testID="hamburger-menu"
           style={styles.hamburgerButton}
         >
           <Animated.Text style={[styles.hamburgerIcon, hamburgerStyle]}>☰</Animated.Text>

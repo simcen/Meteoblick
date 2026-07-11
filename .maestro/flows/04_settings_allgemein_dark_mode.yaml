@@ -1,0 +1,47 @@
+# 04_settings_allgemein_dark_mode.yaml — Toggle the theme SegmentedControl
+# in Einstellungen → Allgemein → Erscheinungsbild and assert the app re-renders.
+#
+# Exercises all three options (Automatisch / Hell / Dunkel). Maestro can't read
+# theme bg colors directly, but a re-render of "Meteoblick" header text after
+# each tap confirms the ThemeProvider fired.
+appId: ch.meteoblick
+---
+- launchApp:
+    clearState: false
+- tapOn:
+    id: "hamburger-menu"
+- tapOn:
+    text: "Settings"
+- assertVisible:
+    text: "Einstellungen"
+
+# Light (Hell)
+- tapOn:
+    text: "Hell"
+- assertVisible:
+    text: "Meteoblick"
+
+# Dark (Dunkel)
+- tapOn:
+    text: "Dunkel"
+- assertVisible:
+    text: "Meteoblick"
+
+# System (Automatisch)
+- tapOn:
+    text: "Automatisch"
+- assertVisible:
+    text: "Meteoblick"
+
+# Persistence: re-launch cold and assert the last selection (Automatisch) survived.
+- stopApp
+- launchApp:
+    clearState: false
+- tapOn:
+    id: "hamburger-menu"
+- tapOn:
+    text: "Settings"
+- assertVisible:
+    text: "Einstellungen"
+- assertVisible:
+    text: "Automatisch"

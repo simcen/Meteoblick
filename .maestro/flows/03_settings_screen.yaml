@@ -1,0 +1,19 @@
+# 03_settings_screen.yaml — Open drawer → tap Settings → verify modal.
+appId: ch.meteoblick
+---
+- launchApp:
+    clearState: false
+- tapOn:
+    id: "hamburger-menu"
+- assertVisible:
+    text: "Settings"
+- tapOn:
+    text: "Settings"
+- assertVisible:
+    text: "Einstellungen"
+- assertVisible:
+    text: "Allgemein"
+- assertVisible:
+    text: "Orte"
+- assertVisible:
+    text: "Smart Home"

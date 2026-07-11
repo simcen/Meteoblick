@@ -358,6 +358,7 @@ export default function LoxoneConfigScreen() {
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           accessibilityRole="button"
           accessibilityLabel="Schliessen"
+          testID="modal-close-button"
           style={styles.closeButton}
         >
           <Text style={styles.closeIcon}>✕</Text>

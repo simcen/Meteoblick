@@ -1,0 +1,12 @@
+# 01_home_screen.yaml — Smoke test: launch app, verify Home (Wetter) renders.
+#
+# Prerequisite: app must be installed on a running iOS simulator. Run
+# `pnpm ios` once before invoking `maestro test`.
+appId: ch.meteoblick
+---
+- launchApp:
+    clearState: false
+- assertVisible:
+    text: "Wetter"
+- assertVisible:
+    text: "Meteoblick"

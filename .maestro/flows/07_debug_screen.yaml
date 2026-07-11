@@ -1,0 +1,15 @@
+# 07_debug_screen.yaml — Drawer → Debug modal renders.
+appId: ch.meteoblick
+---
+- launchApp:
+    clearState: false
+- tapOn:
+    id: "hamburger-menu"
+- tapOn:
+    text: "Debug"
+- assertVisible:
+    text: "🔍 Debug Info"
+- assertVisible:
+    text: "App Fetch (Foreground)"
+- assertVisible:
+    text: "Background Fetch"

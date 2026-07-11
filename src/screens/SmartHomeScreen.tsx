@@ -195,6 +195,7 @@ export default function SmartHomeScreen() {
               <Row label="Status" value={enabled ? 'Aktiviert' : 'Deaktiviert'} />
               <TouchableOpacity
                 onPress={() => (navigation.getParent() as any)?.navigate('Loxone')}
+                testID="edit-config-button"
                 style={styles.editButton}
               >
                 <Text style={styles.editButtonText}>Konfiguration bearbeiten</Text>

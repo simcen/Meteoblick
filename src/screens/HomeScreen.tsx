@@ -191,6 +191,7 @@ export default function HomeScreen() {
           onPress={() => (navigation.getParent() as any)?.navigate('Orte')}
           accessibilityRole="button"
           accessibilityLabel="Standort ändern"
+          testID="change-location-button"
         >
           <Text style={styles.changeLocationText}>Standort ändern</Text>
         </TouchableOpacity>

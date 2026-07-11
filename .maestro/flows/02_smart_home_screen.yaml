@@ -1,0 +1,10 @@
+# 02_smart_home_screen.yaml — Tap "Smart Home" bottom tab, verify screen renders.
+appId: ch.meteoblick
+---
+- launchApp:
+    clearState: false
+- tapOn:
+    text: "Smart Home"
+    index: 0  # bottom tab (the section header shows the same text)
+- assertVisible:
+    text: "Aktuelle Loxone-Sensordaten für das Widget."

@@ -1,0 +1,19 @@
+# 05_orte_screen.yaml — Settings → Orte modal renders.
+appId: ch.meteoblick
+---
+- launchApp:
+    clearState: false
+- tapOn:
+    id: "hamburger-menu"
+- tapOn:
+    text: "Settings"
+- assertVisible:
+    text: "Einstellungen"
+- tapOn:
+    text: "Orte"
+- assertVisible:
+    text: "Standort suchen"
+- assertVisible:
+    text: "Wähle deinen Standort für die Wetterprognose und das Widget."
+- assertVisible:
+    text: "Speichern"
