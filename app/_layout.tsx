@@ -12,6 +12,7 @@ import { useMemo } from 'react';
 import { View } from 'react-native';
 import { AppProvider } from '../src/providers/AppProvider';
 import { ThemeProvider, useTheme } from '../src/contexts/ThemeContext';
+import type { Palette } from '../src/constants/designSystem';
 import { ScrollProvider, useScrollContext } from '../src/contexts/ScrollContext';
 import { AppHeader } from '../src/components/AppHeader';
 import { DrawerContent } from '../src/components/DrawerContent';
@@ -119,12 +120,21 @@ function MainStack() {
   );
 }
 
-function Shell() {
+function Shell({ colors }: { colors: Palette }) {
   return (
     <Drawer.Navigator
       screenOptions={{
         headerShown: false,
-        drawerStyle: { width: '75%' },
+        drawerStyle: {
+          width: '75%',
+          backgroundColor: colors.background.primary,
+          // The default drawer casts a soft white drop-shadow on its right
+          // edge. On real iPhone ProMotion displays this reads as a thin
+          // white line during the open/close animation in dark mode.
+          // Removing the shadow eliminates the flicker while keeping the
+          // drawer background opaque.
+          shadowColor: 'transparent',
+        },
       }}
       drawerContent={(props) => <DrawerContent {...props} />}
     >
@@ -174,7 +184,7 @@ function ThemedShell() {
       <StatusBar style={effectiveScheme === 'dark' ? 'light' : 'dark'} />
       <ScrollProvider>
         <NavigationContainer theme={navTheme}>
-          <Shell />
+          <Shell colors={colors} />
         </NavigationContainer>
       </ScrollProvider>
     </>
