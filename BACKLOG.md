@@ -20,8 +20,11 @@ values: `open` / `exploring` / `in-progress` / `done` / `reverted`.
   single consolidated `/api/widget/timeline` call (Loxone fetched server-side).
 - Polish backlog (post-MVP):
   - **Swipe-to-delete** instead of ✕ icon — more iOS-native for row removal
-  - **Connection section → stack card (non-collapsible)**, "Konfiguration speichern" button only persists connection fields (sensors already auto-save via granular ops)
   - **SmartHomeScreen**: last sensor row in list shouldn't have a horizontal divider (matches menuGroup's rowLast treatment)
+  - **Combine the two toggles into a SegmentedControl** — currently
+    LoxoneConfigScreen has "Loxone aktivieren" (master enable) and
+    "Verbindung" (in-app/widget flags) as separate UI. A SegmentedControl
+    would unify them. (Replaces the current combined card.)
   - Sensor types beyond temperature (humidity, brightness, ...) — D1 deferred
 
 ### Drawer → Stack (experimental)

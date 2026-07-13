@@ -151,12 +151,6 @@ export default function LoxoneConfigScreen() {
         sensorName: {
           ...Typography.body,
           color: colors.label.primary,
-          fontWeight: '500',
-        },
-        sensorMeta: {
-          ...Typography.caption2,
-          color: colors.label.tertiary,
-          marginTop: 2,
         },
         sensorFlags: { flexDirection: 'row', alignItems: 'center', marginRight: Spacing.xs },
         sensorFlag: {
@@ -202,20 +196,20 @@ export default function LoxoneConfigScreen() {
           paddingVertical: Spacing.sm,
         },
         connectionCardMain: { flex: 1 },
-        connectionCardSnr: {
+        connectionCardLabel: {
           ...Typography.body,
           color: colors.label.primary,
-          fontWeight: '500',
         },
-        connectionCardEmpty: {
-          ...Typography.body,
-          color: colors.label.tertiary,
-          fontStyle: 'italic',
+        connectionSeparator: {
+          height: StyleSheet.hairlineWidth,
+          backgroundColor: colors.separator.nonOpaque,
+          marginVertical: Spacing.xs,
         },
-        connectionCardMeta: {
-          ...Typography.caption2,
-          color: colors.label.secondary,
-          marginTop: 2,
+        connectionCardActive: {
+          ...Typography.caption1,
+          color: colors.tint,
+          fontWeight: '600',
+          marginRight: Spacing.xs,
         },
         connectionCardChevron: {
           fontSize: 24,
@@ -371,7 +365,10 @@ export default function LoxoneConfigScreen() {
           Wetterprognose und aktuelle Messwerte für den gewählten Standort.
         </Text>
 
-        {/* Master enable toggle */}
+        {/* Master enable + Connection summary — combined card. Top row
+            has the Loxone master toggle, bottom row is the connection
+            summary (label + Aktiv status + chevron) that navigates to
+            LoxoneConnection. */}
         <View style={styles.section}>
           <View style={styles.toggleRow}>
             <View style={styles.toggleLabel}>
@@ -385,34 +382,24 @@ export default function LoxoneConfigScreen() {
               thumbColor={colors.background.primary}
             />
           </View>
-        </View>
 
-        {/* Connection section (always visible, no collapse) */}
-        {/* Connection summary card — navigates to LoxoneConnection on tap */}
-        <TouchableOpacity
-          style={styles.section}
-          onPress={openConnectionEdit}
-          accessibilityRole="button"
-          accessibilityLabel="Verbindung bearbeiten"
-        >
-          <View style={styles.connectionCardRow}>
+          <View style={styles.connectionSeparator} />
+
+          <TouchableOpacity
+            style={styles.connectionCardRow}
+            onPress={openConnectionEdit}
+            accessibilityRole="button"
+            accessibilityLabel="Verbindung bearbeiten"
+          >
             <View style={styles.connectionCardMain}>
-              {cloudAddress ? (
-                <>
-                  <Text style={styles.connectionCardSnr}>{cloudAddress}</Text>
-                  <Text style={styles.connectionCardMeta}>
-                    {enabled ? 'Aktiviert' : 'Deaktiviert'}
-                  </Text>
-                </>
-              ) : (
-                <Text style={styles.connectionCardEmpty}>
-                  Keine Verbindung konfiguriert
-                </Text>
-              )}
+              <Text style={styles.connectionCardLabel}>Verbindung</Text>
             </View>
+            {enabled && (
+              <Text style={styles.connectionCardActive}>Aktiv</Text>
+            )}
             <Text style={styles.connectionCardChevron}>›</Text>
-          </View>
-        </TouchableOpacity>
+          </TouchableOpacity>
+        </View>
 
         {/* Sensor list (Phase 2.1) */}
         <View style={styles.section}>
@@ -456,9 +443,6 @@ export default function LoxoneConfigScreen() {
                           {item.name}
                         </Text>
                       </TouchableOpacity>
-                      <Text style={styles.sensorMeta} numberOfLines={1}>
-                        {item.uuid.slice(0, 8)}…
-                      </Text>
                     </View>
 
                     {/* Flags: in-app + in-widget */}
