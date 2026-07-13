@@ -127,6 +127,20 @@ git commit -m "chore(deps): upgrade expo sdk 56 to 57
 - react-native@0.86"
 ```
 
+### Kurz halten
+
+- Eine Zeile Subject reicht meistens — Body nur bei nicht-trivialen Commits.
+- "Conventional commit reicht" — keine Romane, keine Bullet-Listen für jeden
+  kleinen Schritt. Subjekt beschreibt was, Body nur wenn warum unklar.
+- Subject max. 72 Zeichen.
+
+### Author / Co-Author
+
+- Author ist **immer** der Standard-Git-User (`Simon Balz <simon@balz.me>`) —
+  niemals via `-c user.name=... -c user.email=...` überschreiben.
+- Co-Autoren via `Co-Authored-By:`-Trailer möglich, wenn ein LLM substantiell
+  mitgeholfen hat (z.B. Code-Reviews, Refactorings).
+
 ### Breaking Changes
 
 Wenn eine Änderung Breaking ist (API-Änderung, neue Requirements):
