@@ -9,6 +9,23 @@ jest.mock('../../constants', () => ({
   API_BASE_URL: 'http://test-backend',
 }));
 
+/**
+ * Build a fake fetch Response. The loxone client reads `response.text()`
+ * first (defensive parse), so the mock must expose `text` returning the
+ * raw response body. For object bodies, we JSON-serialize; for string
+ * bodies we pass through as-is (so empty string remains empty).
+ */
+function fakeResponse(body: unknown, ok = true, status = 200): Response {
+  const text = typeof body === 'string' ? body : JSON.stringify(body);
+  return {
+    ok,
+    status,
+    statusText: ok ? 'OK' : 'Error',
+    json: async () => (typeof body === 'string' ? JSON.parse(body || 'null') : body),
+    text: async () => text,
+  } as unknown as Response;
+}
+
 const PROXY_BASE = 'http://test-backend/api/loxone';
 
 describe('LoxoneAPI', () => {
@@ -19,9 +36,8 @@ describe('LoxoneAPI', () => {
   };
 
   function mockCloudDNS(extra: Record<string, unknown> = {}) {
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
+    (global.fetch as jest.Mock).mockResolvedValueOnce(
+      fakeResponse({
         Code: 200,
         ip: '84.1.2.3',
         port: 443,
@@ -31,23 +47,25 @@ describe('LoxoneAPI', () => {
         version: '12.0.0.0',
         ...extra,
       }),
-    });
+    );
   }
 
   function mockApiKeyResponse(apiKey = 'the-api-key') {
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ LL: { value: apiKey, Code: '200' } }),
-    });
+    (global.fetch as jest.Mock).mockResolvedValueOnce(
+      fakeResponse({ LL: { value: apiKey, Code: '200' } }),
+    );
   }
 
   function mockValueResponse(value: string) {
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        LL: { control: '15beed5b-01ab-d81d-ffff2b06d5b9c660', value, Code: '200' },
+    (global.fetch as jest.Mock).mockResolvedValueOnce(
+      fakeResponse({
+        LL: {
+          control: '15beed5b-01ab-d81d-ffff2b06d5b9c660',
+          value,
+          Code: '200',
+        },
       }),
-    });
+    );
   }
 
   beforeEach(() => {
@@ -178,10 +196,9 @@ describe('LoxoneAPI', () => {
         cats: {},
       };
 
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockStructureFile,
-      });
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        fakeResponse(mockStructureFile),
+      );
 
       const api = new LoxoneAPI(mockConfig);
       const structureFile = await api.getStructureFile();
@@ -193,6 +210,28 @@ describe('LoxoneAPI', () => {
       const structCall = (global.fetch as jest.Mock).mock.calls[2];
       expect(structCall[0]).toBe(`${PROXY_BASE}/data/LoxAPP3.json`);
       expect(structCall[1].headers['X-Loxone-BaseURL']).toBe('https://connect.loxonecloud.com/504F94A1874F');
+    });
+
+    it('should throw a clear error on empty body (not "JSON Parse error: Unexpected end of input")', async () => {
+      mockCloudDNS();
+      mockApiKeyResponse();
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        fakeResponse('', true, 200), // empty body
+      );
+
+      const api = new LoxoneAPI(mockConfig);
+      await expect(api.getStructureFile()).rejects.toThrow(/leere Antwort/);
+    });
+
+    it('should throw a clear error on malformed JSON body', async () => {
+      mockCloudDNS();
+      mockApiKeyResponse();
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        fakeResponse('not json at all', true, 200),
+      );
+
+      const api = new LoxoneAPI(mockConfig);
+      await expect(api.getStructureFile()).rejects.toThrow(/keine gültige JSON-Antwort/);
     });
   });
 

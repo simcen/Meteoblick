@@ -102,6 +102,30 @@ const CLOUD_PREFIX = 'https://connect.loxonecloud.com/';
 const TEMPERATURE_TIMEOUT_MS = 15000;
 const STRUCTURE_FILE_TIMEOUT_MS = 90000;
 const DNS_TIMEOUT_MS = 10000;
+
+/**
+ * Parse a Response as JSON, with a clear error on empty or malformed
+ * bodies. The default `response.json()` throws "JSON Parse error:
+ * Unexpected end of input" on an empty body — common transient case
+ * (401, network blip, Cloud auth expired) that previously surfaced as a
+ * raw cryptic error in the UI.
+ */
+async function parseJsonOrThrow<T>(response: Response, context: string): Promise<T> {
+  const raw = await response.text();
+  if (!raw) {
+    throw new Error(
+      `${context}: leere Antwort (Status ${response.status}). ` +
+        'Verbindung prüfen und erneut versuchen.',
+    );
+  }
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    throw new Error(
+      `${context}: ungültige JSON-Antwort (Status ${response.status}).`,
+    );
+  }
+}
 const REACHABILITY_TIMEOUT_MS = 3000;
 const AUTH_HEADER_TIMEOUT_MS = 10000;
 
@@ -171,7 +195,7 @@ export class LoxoneAPI {
         throw new Error(`Loxone DNS query failed: ${response.status} ${response.statusText}`);
       }
 
-      const data: LoxoneDNSResponse = await response.json();
+      const data: LoxoneDNSResponse = await parseJsonOrThrow<LoxoneDNSResponse>(response, 'DNS-Lookup');
       console.log('[Loxone] DNS response code:', data.Code);
 
       if (data.Code !== 200) {
@@ -268,7 +292,26 @@ export class LoxoneAPI {
       }
 
       console.log('[Loxone] Response received, parsing JSON...');
-      const data = await response.json();
+      // Defensive parse: response.json() throws on empty body. We've seen
+      // transient 401 / network blips return an empty body — surface a
+      // clearer error than "JSON Parse error: Unexpected end of input".
+      const rawText = await response.text();
+      if (!rawText) {
+        throw new Error(
+          'Loxone lieferte eine leere Antwort für die Struktur-Datei. ' +
+            'Mögliche Ursachen: Cloud-Auth abgelaufen, Miniserver offline, ' +
+            'oder Netzwerkproblem. Verbindung prüfen und erneut versuchen.',
+        );
+      }
+      let data: LoxoneStructureFile;
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        throw new Error(
+          `Loxone lieferte keine gültige JSON-Antwort (Status ${response.status}). ` +
+            'Verbindung + Miniserver-Status prüfen.',
+        );
+      }
 
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       console.log(`[Loxone] Structure File loaded successfully (${elapsed}s)`);
@@ -360,8 +403,7 @@ export class LoxoneAPI {
         throw new Error(`Failed to read temperature: ${response.status}`);
       }
 
-      const data: LoxoneValueResponse = await response.json();
-
+      const data: LoxoneValueResponse = await parseJsonOrThrow<LoxoneValueResponse>(response, 'Temperatur-Read');
       const temperature = parseFloat(data.LL.value);
 
       if (isNaN(temperature)) {
@@ -409,7 +451,7 @@ export class LoxoneAPI {
         throw new Error(`Failed to fetch API key: ${response.status}`);
       }
 
-      const data: LoxoneApiKeyResponse = await response.json();
+      const data: LoxoneApiKeyResponse = await parseJsonOrThrow<LoxoneApiKeyResponse>(response, 'API-Key-Lookup');
       const apiKey = data.LL?.value;
       if (!apiKey) {
         throw new Error('Loxone API key missing in response');
