@@ -221,6 +221,7 @@ jest.mock('../providers/WeatherContext', () => ({
     weather: null,
     loxoneTemp: null,
     loxoneTimestamp: null,
+    loxoneReadings: [],
     isFetching: false,
     refresh: jest.fn(),
     lastFetchInfo: null,

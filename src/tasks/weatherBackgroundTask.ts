@@ -31,36 +31,33 @@ TaskManager.defineTask(WEATHER_BACKGROUND_TASK, async () => {
   }
 
   // 2. Loxone (if configured) — independent of MeteoSwiss.
-  // Phase 1: still mirrors the FIRST showInApp sensor as the legacy
-  // single value (for the widget's current single-sensor mirror + cache).
-  // Phase 3 will replace this with a multi-sensor cache + multi-value
-  // widget payload.
+  // Phase 3: fetch all showInApp sensors in parallel, store as array.
+  // The widget mirror still uses the first reading (Phase 4b will overhaul).
   let loxoneTemp: number | undefined;
   let loxoneTimestamp: string | undefined;
   let loxoneFresh = false;
 
   const loxoneConfig = await SharedStorage.getLoxoneConfig();
-  const primarySensorUuid =
-    loxoneConfig?.sensors.find((s) => s.showInApp)?.uuid ?? loxoneConfig?.sensors[0]?.uuid;
-  if (loxoneConfig?.enabled && primarySensorUuid) {
+  const appSensors = loxoneConfig?.sensors.filter((s) => s.showInApp) ?? [];
+  if (loxoneConfig?.enabled && appSensors.length > 0) {
+    const now = new Date().toISOString();
     try {
       const api = new LoxoneAPI(loxoneConfig);
-      const temp = await api.getTemperature(primarySensorUuid);
-      loxoneTemp = temp;
-      loxoneTimestamp = new Date().toISOString();
-      await SharedStorage.setLoxoneSensorData({
-        temperature: temp,
-        timestamp: loxoneTimestamp,
-      });
+      const results = await api.getTemperatures(appSensors.map((s) => s.uuid));
+      const readings = results.map((r) => ({ uuid: r.uuid, temperature: r.temperature, timestamp: now }));
+      await SharedStorage.setLoxoneSensorData(readings);
+      const primary = readings.find((r) => r.uuid === appSensors[0].uuid) ?? readings[0];
+      loxoneTemp = primary?.temperature;
+      loxoneTimestamp = primary?.timestamp;
       loxoneFresh = true;
-      console.log('[Background] Loxone temperature:', temp);
+      console.log('[Background] Loxone readings:', readings.length);
     } catch (loxoneError) {
       console.warn('[Background] Loxone fetch failed:', loxoneError);
-      // Fallback to cached value
       const cached = await SharedStorage.getLoxoneSensorData();
-      if (cached) {
-        loxoneTemp = cached.temperature;
-        loxoneTimestamp = cached.timestamp;
+      const primary = cached?.find((r) => r.uuid === appSensors[0].uuid) ?? cached?.[0];
+      if (primary) {
+        loxoneTemp = primary.temperature;
+        loxoneTimestamp = primary.timestamp;
       }
     }
   }

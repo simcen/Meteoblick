@@ -29,7 +29,7 @@ export default function SmartHomeScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const colors = useColors();
-  const { loxoneTemp, loxoneTimestamp, isFetching: refreshing, refresh } = useWeather();
+  const { loxoneReadings, isFetching: refreshing, refresh } = useWeather();
   const { sharedScrollY } = useScrollContext();
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (e) => {
@@ -71,15 +71,32 @@ export default function SmartHomeScreen() {
           fontSize: 36,
           fontWeight: '700',
           color: colors.label.primary,
-          marginBottom: Spacing.xs,
         },
         temperaturePlaceholder: {
           fontSize: 36,
           fontWeight: '300',
           color: colors.label.tertiary,
-          marginBottom: Spacing.xs,
         },
-        sensorName: { ...Typography.subheadline, color: colors.label.secondary, marginBottom: Spacing.md },
+        // ─── Multi-sensor row (Phase 3) ─────────────────────────────────
+        sensorRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingVertical: Spacing.sm,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: colors.separator.nonOpaque,
+        },
+        sensorRowLast: { borderBottomWidth: 0 },
+        sensorMain: { flex: 1, marginRight: Spacing.sm },
+        sensorName: {
+          ...Typography.body,
+          color: colors.label.primary,
+          fontWeight: '500',
+        },
+        sensorTimestamp: {
+          ...Typography.caption2,
+          color: colors.label.tertiary,
+          marginTop: 2,
+        },
         timestamp: { ...Typography.footnote, color: colors.label.tertiary },
         editButton: { marginTop: Spacing.md, paddingVertical: Spacing.sm, alignItems: 'center' },
         editButtonText: { ...Typography.subheadline, color: colors.tint, fontWeight: '600' },
@@ -101,7 +118,9 @@ export default function SmartHomeScreen() {
 
   const [enabled, setEnabled] = useState(false);
   const [cloudAddress, setCloudAddress] = useState<string | null>(null);
-  const [sensorName, setSensorName] = useState<string | null>(null);
+  const [appSensors, setAppSensors] = useState<
+    { uuid: string; name: string; order: number }[]
+  >([]);
   const [hasConfig, setHasConfig] = useState(false);
 
   // Reload config on every focus so the sensor name + enabled state stay in sync
@@ -113,7 +132,12 @@ export default function SmartHomeScreen() {
         if (cancelled || !config) return;
         setEnabled(config.enabled);
         setCloudAddress(config.cloudAddress);
-        setSensorName(config.sensors.find((s) => s.showInApp)?.name ?? null);
+        setAppSensors(
+          config.sensors
+            .filter((s) => s.showInApp)
+            .sort((a, b) => a.order - b.order)
+            .map((s) => ({ uuid: s.uuid, name: s.name, order: s.order })),
+        );
         setHasConfig(true);
       })();
       return () => {
@@ -129,10 +153,21 @@ export default function SmartHomeScreen() {
       if (!config) return;
       setEnabled(config.enabled);
       setCloudAddress(config.cloudAddress);
-      setSensorName(config.temperatureSensorName ?? null);
+      setAppSensors(
+        config.sensors
+          .filter((s) => s.showInApp)
+          .sort((a, b) => a.order - b.order)
+          .map((s) => ({ uuid: s.uuid, name: s.name, order: s.order })),
+      );
       setHasConfig(true);
     })();
   }, []);
+
+  const readingsByUuid = useMemo(() => {
+    const m = new Map<string, { temperature: number; timestamp: string }>();
+    for (const r of loxoneReadings) m.set(r.uuid, { temperature: r.temperature, timestamp: r.timestamp });
+    return m;
+  }, [loxoneReadings]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
@@ -168,25 +203,46 @@ export default function SmartHomeScreen() {
           </View>
         ) : (
           <>
-            {/* Current reading */}
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>Aktueller Wert</Text>
-              {loxoneTemp !== null ? (
-                <Text style={styles.temperature}>
-                  🌡️ {loxoneTemp.toFixed(1)}°C
+            {/* Sensor readings — one row per showInApp sensor (Phase 3) */}
+            {appSensors.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyTitle}>Keine App-Sensoren</Text>
+                <Text style={styles.emptyBody}>
+                  In den Sensor-Einstellungen mindestens einen Sensor auf "App" stellen.
                 </Text>
-              ) : (
-                <Text style={styles.temperaturePlaceholder}>— °C</Text>
-              )}
-              {sensorName && (
-                <Text style={styles.sensorName}>{sensorName}</Text>
-              )}
-              {loxoneTimestamp && (
-                <Text style={styles.timestamp}>
-                  Aktualisiert: {new Date(loxoneTimestamp).toLocaleString('de-CH')}
-                </Text>
-              )}
-            </View>
+                <Button
+                  title="Sensoren verwalten"
+                  onPress={() => (navigation.getParent() as any)?.navigate('Loxone')}
+                  fullWidth
+                />
+              </View>
+            ) : (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Sensoren</Text>
+                {appSensors.map((sensor) => {
+                  const reading = readingsByUuid.get(sensor.uuid);
+                  return (
+                    <View key={sensor.uuid} style={styles.sensorRow}>
+                      <View style={styles.sensorMain}>
+                        <Text style={styles.sensorName}>{sensor.name}</Text>
+                        {reading ? (
+                          <Text style={styles.sensorTimestamp}>
+                            Aktualisiert: {new Date(reading.timestamp).toLocaleString('de-CH')}
+                          </Text>
+                        ) : (
+                          <Text style={styles.sensorTimestamp}>— keine Daten</Text>
+                        )}
+                      </View>
+                      <Text style={styles.temperature}>
+                        {reading
+                          ? `🌡️ ${reading.temperature.toFixed(1)}°C`
+                          : '—'}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
 
             {/* Connection details */}
             <View style={styles.card}>

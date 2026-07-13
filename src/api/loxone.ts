@@ -432,6 +432,28 @@ export class LoxoneAPI {
   }
 
   /**
+   * Fetch temperatures for multiple sensors in parallel.
+   * Loxone doesn't expose a batched endpoint, so this fans out individual
+   * `getTemperature` calls. Order of the result matches the input order.
+   * Sensors that fail to fetch are silently dropped — caller should fall
+   * back to the cached value for that sensor.
+   */
+  async getTemperatures(
+    uuids: string[],
+  ): Promise<Array<{ uuid: string; temperature: number }>> {
+    if (uuids.length === 0) return [];
+    const settled = await Promise.allSettled(
+      uuids.map(async (uuid) => ({
+        uuid,
+        temperature: await this.getTemperature(uuid),
+      })),
+    );
+    return settled
+      .filter((r): r is PromiseFulfilledResult<{ uuid: string; temperature: number }> => r.status === 'fulfilled')
+      .map((r) => r.value);
+  }
+
+  /**
    * Build URL + headers for an authenticated request.
    *
    * Empirically: the Miniserver accepts HTTP Basic Auth with the raw password

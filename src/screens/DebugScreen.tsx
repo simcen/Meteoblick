@@ -201,24 +201,25 @@ export default function DebugScreen() {
     let loxoneFresh = false;
 
     const loxoneConfig = await SharedStorage.getLoxoneConfig();
-    const primarySensorUuid = loxoneConfig?.sensors.find((s) => s.showInApp)?.uuid;
-    if (loxoneConfig?.enabled && primarySensorUuid) {
+    const appSensors = loxoneConfig?.sensors.filter((s) => s.showInApp) ?? [];
+    if (loxoneConfig?.enabled && appSensors.length > 0) {
+      const now = new Date().toISOString();
       try {
         const api = new LoxoneAPI(loxoneConfig);
-        const temp = await api.getTemperature(primarySensorUuid);
-        loxoneTemp = temp;
-        loxoneTimestamp = new Date().toISOString();
-        await SharedStorage.setLoxoneSensorData({
-          temperature: temp,
-          timestamp: loxoneTimestamp,
-        });
+        const results = await api.getTemperatures(appSensors.map((s) => s.uuid));
+        const readings = results.map((r) => ({ uuid: r.uuid, temperature: r.temperature, timestamp: now }));
+        await SharedStorage.setLoxoneSensorData(readings);
+        const primary = readings.find((r) => r.uuid === appSensors[0].uuid) ?? readings[0];
+        loxoneTemp = primary?.temperature;
+        loxoneTimestamp = primary?.timestamp;
         loxoneFresh = true;
       } catch (error: any) {
         console.warn('[Debug] Loxone fetch failed:', error);
         const cached = await SharedStorage.getLoxoneSensorData();
-        if (cached) {
-          loxoneTemp = cached.temperature;
-          loxoneTimestamp = cached.timestamp;
+        const primary = cached?.find((r) => r.uuid === appSensors[0].uuid) ?? cached?.[0];
+        if (primary) {
+          loxoneTemp = primary.temperature;
+          loxoneTimestamp = primary.timestamp;
         }
       }
     }

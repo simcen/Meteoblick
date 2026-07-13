@@ -8,6 +8,15 @@ export type ThemePreference = 'system' | 'light' | 'dark';
 
 const VALID_THEME_PREFERENCES: ThemePreference[] = ['system', 'light', 'dark'];
 
+// Cached temperature reading for a single Loxone sensor.
+// Stored as an array (Phase 3+) so SmartHomeScreen can show all configured
+// sensors and the widget still pulls the first entry until Phase 4b.
+export type LoxoneReading = {
+  uuid: string;
+  temperature: number;
+  timestamp: string;
+};
+
 const POI_CACHE_KEY = 'meteoblick_poi_cache';
 
 // ─── Loxone multi-sensor types & migration helper ───────────────────
@@ -313,7 +322,7 @@ async reorderSensors(orderedUuids: string[]): Promise<LoxoneConfig | null> {
     }
   },
 
-  async getLoxoneSensorData(): Promise<{ temperature: number; timestamp: string } | null> {
+  async getLoxoneSensorData(): Promise<LoxoneReading[] | null> {
     try {
       const json = await SharedGroupPreferences.getItem(
         WIDGET_LOXONE_SENSOR_DATA_KEY,
@@ -326,9 +335,9 @@ async reorderSensors(orderedUuids: string[]): Promise<LoxoneConfig | null> {
     }
   },
 
-  async setLoxoneSensorData(data: { temperature: number; timestamp: string }): Promise<void> {
+  async setLoxoneSensorData(readings: LoxoneReading[]): Promise<void> {
     try {
-      const json = JSON.stringify(data);
+      const json = JSON.stringify(readings);
       await SharedGroupPreferences.setItem(WIDGET_LOXONE_SENSOR_DATA_KEY, json, APP_GROUP_ID);
     } catch (error) {
       console.error('Failed to save Loxone sensor data:', error);

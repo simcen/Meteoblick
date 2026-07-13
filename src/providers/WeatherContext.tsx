@@ -117,6 +117,9 @@ interface WeatherState {
   weather: WeatherData | null;
   loxoneTemp: number | null;
   loxoneTimestamp: string | null;
+  // Phase 3: array of all showInApp sensor readings. `loxoneTemp`/
+  // `loxoneTimestamp` remain the FIRST reading for legacy widget mirror.
+  loxoneReadings: { uuid: string; temperature: number; timestamp: string }[];
   isFetching: boolean;
   lastFetchAt: Date | null;
 }
@@ -142,6 +145,7 @@ export function WeatherProvider({ children }: WeatherProviderProps) {
     weather: null,
     loxoneTemp: null,
     loxoneTimestamp: null,
+    loxoneReadings: [],
     isFetching: false,
     lastFetchAt: null,
   });
@@ -180,37 +184,40 @@ export function WeatherProvider({ children }: WeatherProviderProps) {
       isNull: loxoneConfig === null,
       keys: loxoneConfig ? Object.keys(loxoneConfig) : null,
       enabled: loxoneConfig?.enabled,
-      // Phase 1: read first showInApp sensor as the primary sensor.
-      // Phase 3 will replace this with a multi-sensor fetch.
-      hasSensorUUID: !!loxoneConfig?.sensors.find((s) => s.showInApp),
+      sensorCount: loxoneConfig?.sensors.filter((s) => s.showInApp).length ?? 0,
       username: loxoneConfig?.username,
       cloudAddress: loxoneConfig?.cloudAddress,
     });
-    const primarySensorUuid = loxoneConfig?.sensors.find((s) => s.showInApp)?.uuid;
-    if (loxoneConfig?.enabled && primarySensorUuid) {
+    // Phase 3: fetch all showInApp sensors in parallel.
+    const appSensors = loxoneConfig?.sensors.filter((s) => s.showInApp) ?? [];
+    if (loxoneConfig?.enabled && appSensors.length > 0) {
+      const uuids = appSensors.map((s) => s.uuid);
+      const now = new Date().toISOString();
       try {
         const api = new LoxoneAPI(loxoneConfig);
-        const temp = await api.getTemperature(primarySensorUuid);
-        loxoneTemp = temp;
-        loxoneTimestamp = new Date().toISOString();
-        await SharedStorage.setLoxoneSensorData({
-          temperature: temp,
-          timestamp: loxoneTimestamp,
-        });
-        console.log('[Weather] Loxone temperature:', temp);
+        const results = await api.getTemperatures(uuids);
+        const readings = results.map((r) => ({ uuid: r.uuid, temperature: r.temperature, timestamp: now }));
+        await SharedStorage.setLoxoneSensorData(readings);
+        // Primary sensor (first showInApp) for legacy widget mirror
+        const primary = readings.find((r) => r.uuid === appSensors[0].uuid) ?? readings[0];
+        loxoneTemp = primary?.temperature ?? null;
+        loxoneTimestamp = primary?.timestamp ?? null;
+        console.log('[Weather] Loxone readings:', readings.length);
       } catch (error: any) {
         console.warn('[Weather] Loxone fetch failed (continuing):', error?.message ?? error);
         const cached = await SharedStorage.getLoxoneSensorData();
-        if (cached) {
-          loxoneTemp = cached.temperature;
-          loxoneTimestamp = cached.timestamp;
-          console.log('[Weather] Using cached Loxone:', loxoneTemp, loxoneTimestamp);
+        if (cached && cached.length > 0) {
+          const cachedByUuid = new Map(cached.map((r) => [r.uuid, r]));
+          const primary = cachedByUuid.get(appSensors[0].uuid) ?? cached[0];
+          loxoneTemp = primary.temperature;
+          loxoneTimestamp = primary.timestamp;
+          console.log('[Weather] Using cached Loxone readings:', cached.length);
         } else {
           console.log('[Weather] No cached Loxone data available');
         }
       }
     } else {
-      console.log('[Weather] Loxone skipped — not enabled or no sensor UUID');
+      console.log('[Weather] Loxone skipped — not enabled or no showInApp sensors');
     }
 
     const fetchCompletedAt = new Date();
@@ -219,6 +226,7 @@ export function WeatherProvider({ children }: WeatherProviderProps) {
       weather,
       loxoneTemp,
       loxoneTimestamp,
+      loxoneReadings: (await SharedStorage.getLoxoneSensorData()) ?? [],
       isFetching: false,
       lastFetchAt: fetchCompletedAt,
     });
