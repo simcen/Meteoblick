@@ -1,28 +1,14 @@
 import WidgetKit
 import SwiftUI
 
-// MARK: - Loxone Widget Client (Phase 4b)
+// MARK: - Widget Configuration (App Group mirror)
 //
-// Minimal URLSession client that fetches a sensor's current value
-// directly from Loxone Cloud. The host app (JS) stores credentials +
-// showInWidget sensor UUIDs in the App Group via SharedStorage.
-// This client is invoked by the widget TimelineProvider on each
-// timeline reload so the widget stays current independently of the
-// host app (per scope D8).
-//
-// Mirror of the JS-side LoxoneAPI in src/api/loxone.ts but minimal:
-//   - Cloud only (no local DNS lookup — user is on cloud)
-//   - Raw password (skip SHA-256 token dance; slightly less efficient
-//     but simpler — Loxone accepts raw for /jdev/sps/io/{uuid})
-//   - Per-request timeout (6s) so the widget timeline budget holds
+// Mirrors credentials + showInWidget sensor UUIDs + POI + apiBaseUrl
+// from the host app's SharedStorage. The widget reads this on every
+// timeline reload to know which POI to fetch + which Loxone sensors to
+// ask the backend for.
 
-struct LoxoneSensorReading {
-    let uuid: String
-    let temperature: Double
-    let timestamp: Date
-}
-
-struct LoxoneWidgetConfig: Codable {
+struct WidgetConfig: Codable {
     let cloudAddress: String
     let username: String
     let password: String
@@ -31,15 +17,15 @@ struct LoxoneWidgetConfig: Codable {
     let apiBaseUrl: String?
 }
 
-enum LoxoneConfigStore {
+enum WidgetConfigStore {
     static let appGroup = "group.ch.meteoblick"
     static let key = "loxone_config_widget"  // matches WIDGET_LOXONE_CONFIG_KEY
 
-    static func read() -> LoxoneWidgetConfig? {
+    static func read() -> WidgetConfig? {
         let defaults = UserDefaults(suiteName: appGroup) ?? .standard
         guard let json = defaults.string(forKey: key),
               let data = json.data(using: .utf8),
-              let config = try? JSONDecoder().decode(LoxoneWidgetConfig.self, from: data) else {
+              let config = try? JSONDecoder().decode(WidgetConfig.self, from: data) else {
             return nil
         }
         return config
@@ -48,16 +34,24 @@ enum LoxoneConfigStore {
 
 // MARK: - Widget Timeline Client
 //
-// Calls /api/widget/timeline?poiId=... for consolidated weather data
-// (MeteoSwiss + single-sensor Loxone). Mirrors the JS-side
-// fetchAndWriteWidgetTimeline call so the widget can refresh on its
-// own timeline independently of the host app.
+// Single consolidated HTTP request to the backend's
+// /api/widget/timeline endpoint. The backend fetches MeteoSwiss weather
+// and all showInWidget Loxone sensors on our behalf, returning
+// everything the widget needs in one round-trip.
+//
+// Why one request: the widget extension has strict CPU/memory/time
+// budgets. Doing two parallel requests would split the work and still
+// cost two round-trips. The backend is the right place to consolidate.
+//
+// Credentials are passed per-request via headers — the backend is
+// stateless for Loxone auth (deliberate, see CLAUDE.md).
 
 struct WidgetTimelineResponse: Codable {
     let locationName: String?
     let current: TimelineCurrent?
     let forecast: TimelineForecast?
-    let smartHome: TimelineSmartHome?
+    let smartHome: TimelineSmartHome?       // legacy single-sensor (backward compat)
+    let smartHomeSensors: [TimelineSmartHomeSensor]?  // multi-sensor
     let buildNumber: String?
 }
 
@@ -78,91 +72,58 @@ struct TimelineSmartHome: Codable {
     let timestamp: String?
 }
 
+struct TimelineSmartHomeSensor: Codable {
+    let uuid: String
+    let name: String
+    let temperature: Double
+    let timestamp: String
+}
+
 actor WidgetTimelineClient {
     private let baseURL: String
-
-    init(baseURL: String) {
-        self.baseURL = baseURL
-    }
+    private let loxoneSnr: String?
+    private let loxoneCredentials: String?  // "Basic <base64>"
+    private let loxoneSensorUuids: [String]?
 
     private static let requestTimeout: TimeInterval = 6
 
-    /// Fetch the consolidated weather payload. Returns nil on any failure
-    /// (timeout, non-200, malformed body). Caller falls back to cached
-    /// App Group snapshot.
+    init(baseURL: String, loxoneSnr: String?, loxoneCredentials: String?, loxoneSensorUuids: [String]?) {
+        self.baseURL = baseURL
+        self.loxoneSnr = loxoneSnr
+        self.loxoneCredentials = loxoneCredentials
+        self.loxoneSensorUuids = loxoneSensorUuids
+    }
+
+    /// Single request. Returns nil on any failure (timeout, non-200,
+    /// malformed body). Caller falls back to cached App Group snapshot.
     func fetchTimeline(poiId: String) async -> WidgetTimelineResponse? {
-        let urlString = "\(baseURL)/api/widget/timeline?poiId=\(poiId)"
-        guard let url = URL(string: urlString) else { return nil }
+        var components = URLComponents(string: "\(baseURL)/api/widget/timeline")
+        components?.queryItems = [URLQueryItem(name: "poiId", value: poiId)]
+        guard let url = components?.url else { return nil }
+
         var request = URLRequest(url: url)
         request.timeoutInterval = Self.requestTimeout
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        // Pass Loxone credentials + sensor UUIDs as headers. Backend uses
+        // them to fetch the multi-sensor payload server-side and returns
+        // it consolidated in smartHomeSensors[].
+        if let snr = loxoneSnr, !snr.isEmpty {
+            request.setValue(snr, forHTTPHeaderField: "X-Loxone-SNR")
+        }
+        if let creds = loxoneCredentials, !creds.isEmpty {
+            request.setValue(creds, forHTTPHeaderField: "X-Loxone-Credentials")
+        }
+        if let uuids = loxoneSensorUuids, !uuids.isEmpty {
+            request.setValue(uuids.joined(separator: ","), forHTTPHeaderField: "X-Loxone-Sensor-UUIDs")
+        }
+
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
             return try? JSONDecoder().decode(WidgetTimelineResponse.self, from: data)
         } catch {
             return nil
-        }
-    }
-}
-
-actor LoxoneWidgetClient {
-    private let cloudAddress: String
-    private let username: String
-    private let password: String
-
-    private static let requestTimeout: TimeInterval = 6
-
-    init(cloudAddress: String, username: String, password: String) {
-        self.cloudAddress = cloudAddress
-        self.username = username
-        self.password = password
-    }
-
-    /// Fetch one sensor. Returns nil on any failure (timeout, non-200,
-    /// malformed body). Caller falls back to cached snapshot value.
-    func fetchTemperature(uuid: String) async -> LoxoneSensorReading? {
-        // Cloud URL: https://connect.loxonecloud.com/{SNR}/jdev/sps/io/{uuid}
-        // Auth: HTTP Basic in URL userinfo (Cloud's HTTPS reverse proxy
-        // does not forward Authorization headers — same constraint as JS).
-        let urlString = "https://connect.loxonecloud.com/\(cloudAddress)/jdev/sps/io/\(uuid)"
-        guard var components = URLComponents(string: urlString) else { return nil }
-        components.user = username
-        components.password = password
-        guard let url = components.url else { return nil }
-
-        var request = URLRequest(url: url)
-        request.timeoutInterval = Self.requestTimeout
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
-            // Body: {"LL": {"value": "23.5"}}
-            guard let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let inner = dict["LL"] as? [String: Any],
-                  let valueStr = inner["value"] as? String,
-                  let value = Double(valueStr) else { return nil }
-            return LoxoneSensorReading(uuid: uuid, temperature: value, timestamp: Date())
-        } catch {
-            return nil
-        }
-    }
-
-    /// Fetch all sensors in parallel. Failed sensors are dropped; caller
-    /// can fall back to per-sensor cached values from the snapshot.
-    func fetchTemperatures(uuids: [String]) async -> [LoxoneSensorReading] {
-        await withTaskGroup(of: LoxoneSensorReading?.self) { group in
-            for uuid in uuids {
-                group.addTask { [weak self] in
-                    await self?.fetchTemperature(uuid: uuid)
-                }
-            }
-            var results: [LoxoneSensorReading] = []
-            for await reading in group {
-                if let r = reading { results.append(r) }
-            }
-            return results
         }
     }
 }
@@ -302,26 +263,20 @@ struct MeteoblickProvider: TimelineProvider {
     ///
     /// Returns true if the snapshot was actually updated (triggers a reload).
     private func fetchFreshData(into snapshot: WidgetSnapshot) async -> Bool {
-        guard let loxoneConfig = LoxoneConfigStore.read() else { return false }
+        guard let config = WidgetConfigStore.read() else { return false }
 
-        // Parallel: weather (backend) + Loxone sensors (direct).
-        async let timelineResult: WidgetTimelineResponse? = {
-            guard let poiId = loxoneConfig.poiId, !poiId.isEmpty,
-                  let base = loxoneConfig.apiBaseUrl, !base.isEmpty else { return nil }
-            let client = WidgetTimelineClient(baseURL: base)
-            return await client.fetchTimeline(poiId: poiId)
-        }()
-        async let loxoneReadings: [LoxoneSensorReading] = {
-            guard let uuids = loxoneConfig.showInWidgetSensorUuids, !uuids.isEmpty else { return [] }
-            let client = LoxoneWidgetClient(
-                cloudAddress: loxoneConfig.cloudAddress,
-                username: loxoneConfig.username,
-                password: loxoneConfig.password
-            )
-            return await client.fetchTemperatures(uuids: uuids)
-        }()
-        let timeline = await timelineResult
-        let readings = await loxoneReadings
+        // Single consolidated request. Backend fetches MeteoSwiss +
+        // multi-sensor Loxone on our behalf; we don't talk to Loxone
+        // Cloud directly from the widget.
+        guard let poiId = config.poiId, !poiId.isEmpty,
+              let base = config.apiBaseUrl, !base.isEmpty else { return false }
+        let client = WidgetTimelineClient(
+            baseURL: base,
+            loxoneSnr: config.cloudAddress,
+            loxoneCredentials: config.password.isEmpty ? nil : "Basic \(config.password)",
+            loxoneSensorUuids: config.showInWidgetSensorUuids
+        )
+        guard let timeline = await client.fetchTimeline(poiId: poiId) else { return false }
 
         var changed = false
 
@@ -333,36 +288,32 @@ struct MeteoblickProvider: TimelineProvider {
         var newTimestampActual = snapshot.timestampActual
         var newTempLoxone = snapshot.temperatureLoxone
         let newLoxoneTimestamp = snapshot.temperatureLoxoneLabel
-        if let t = timeline {
-            if let loc = t.locationName, !loc.isEmpty { newLocation = loc; changed = true }
-            if let cur = t.current {
-                if let temp = cur.temperature { newTempActual = String(format: "%.1f", temp); changed = true }
-                if let code = cur.symbolCode, let sym = Self.symbolFor(code: code) {
-                    newWeatherSymbol = sym; changed = true
-                }
-                if let p = cur.precipitation { newPrecip = String(format: "%.1f", p); changed = true }
-                if let ts = cur.timestamp { newTimestampActual = ts; changed = true }
+        if let loc = timeline.locationName, !loc.isEmpty { newLocation = loc; changed = true }
+        if let cur = timeline.current {
+            if let temp = cur.temperature { newTempActual = String(format: "%.1f", temp); changed = true }
+            if let code = cur.symbolCode, let sym = Self.symbolFor(code: code) {
+                newWeatherSymbol = sym; changed = true
             }
-            if let sh = t.smartHome, let temp = sh.temperature {
-                newTempLoxone = String(format: "%.1f", temp)
-                changed = true
-            }
+            if let p = cur.precipitation { newPrecip = String(format: "%.1f", p); changed = true }
+            if let ts = cur.timestamp { newTimestampActual = ts; changed = true }
+        }
+        if let sh = timeline.smartHome, let temp = sh.temperature {
+            newTempLoxone = String(format: "%.1f", temp)
+            changed = true
         }
 
-        // Merge multi-sensor Loxone readings.
+        // Multi-sensor Loxone readings (Phase 4b+). Use backend-provided
+        // values directly; widget uses these for 1/2/6 layouts per family.
         var newSensors = snapshot.smartHomeSensors
-        if !readings.isEmpty {
+        if let sensors = timeline.smartHomeSensors, !sensors.isEmpty {
             let existingByUuid = Dictionary(uniqueKeysWithValues: (snapshot.smartHomeSensors ?? []).map { ($0.uuid, $0) })
-            let isoNow = ISO8601DateFormatter().string(from: Date())
-            let sensorUuids = loxoneConfig.showInWidgetSensorUuids ?? []
-            newSensors = sensorUuids.map { uuid in
-                if let fresh = readings.first(where: { $0.uuid == uuid }) {
-                    let name = existingByUuid[uuid]?.name ?? uuid
-                    let temp = String(format: "%.1f", fresh.temperature)
-                    return SmartHomeSensor(uuid: uuid, name: name, temperature: temp, timestamp: isoNow)
-                }
-                if let prev = existingByUuid[uuid] { return prev }
-                return SmartHomeSensor(uuid: uuid, name: uuid, temperature: "--", timestamp: isoNow)
+            newSensors = sensors.map { s in
+                SmartHomeSensor(
+                    uuid: s.uuid,
+                    name: existingByUuid[s.uuid]?.name ?? s.name,
+                    temperature: String(format: "%.1f", s.temperature),
+                    timestamp: s.timestamp
+                )
             }
             changed = true
         }

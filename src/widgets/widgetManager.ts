@@ -101,14 +101,14 @@ export async function fetchAndWriteWidgetTimeline(): Promise<void> {
     }
 
     // Build headers for Loxone (if configured + enabled)
-    // Phase 1: mirror only the first showInWidget sensor (legacy compat).
-    // Phase 4b will overhaul to pass the full showInWidget sensor array.
+    // Phase 4b+: pass ALL showInWidget sensors (multi-uuid) so the
+    // backend's /api/widget/timeline returns smartHomeSensors[].
     const headers: Record<string, string> = {};
     const loxoneConfig = await SharedStorage.getLoxoneConfig();
-    const widgetSensorUuid = loxoneConfig?.sensors.find((s) => s.showInWidget)?.uuid;
-    if (loxoneConfig?.enabled && widgetSensorUuid) {
+    const widgetSensorUuids = loxoneConfig?.sensors.filter((s) => s.showInWidget).map((s) => s.uuid) ?? [];
+    if (loxoneConfig?.enabled && widgetSensorUuids.length > 0) {
       headers['X-Loxone-SNR'] = loxoneConfig.cloudAddress;
-      headers['X-Loxone-Sensor-Uuid'] = widgetSensorUuid;
+      headers['X-Loxone-Sensor-UUIDs'] = widgetSensorUuids.join(',');
       const credentials = btoa(`${loxoneConfig.username}:${loxoneConfig.password}`);
       headers['X-Loxone-Credentials'] = `Basic ${credentials}`;
     }
@@ -125,13 +125,14 @@ export async function fetchAndWriteWidgetTimeline(): Promise<void> {
     console.log('[Widget] Timeline received:', {
       location: data.locationName,
       temp: data.current?.temperature,
-      loxone: data.smartHome?.temperature,
+      sensorCount: data.smartHomeSensors?.length ?? 0,
     });
 
     await updateWidget({
       locationName: data.locationName ?? '—',
       temperatureActual: data.current?.temperature,
       temperatureForecast: data.forecast?.temperature,
+      // Legacy primary (first sensor) for fallback widget mirror.
       temperatureLoxone: data.smartHome?.temperature,
       symbolCode: data.current?.symbolCode ?? 0,
       precipitation: data.current?.precipitation ?? 0,
@@ -139,6 +140,9 @@ export async function fetchAndWriteWidgetTimeline(): Promise<void> {
       timestampActual: data.current?.timestamp,
       timestampForecast: data.forecast?.timestamp,
       timestampLoxone: data.smartHome?.timestamp,
+      // Phase 4b+: multi-sensor array. Widget uses this for its 1/2/6
+      // layouts. Each entry: { uuid, name, temperature, timestamp }.
+      smartHomeSensors: data.smartHomeSensors,
     });
   } catch (error) {
     console.warn('[Widget] Timeline fetch error (widget keeps last snapshot):', error);

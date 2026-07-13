@@ -74,6 +74,19 @@ const WidgetTimelineResponseSchema = z.object({
       timestamp: z.string().datetime().nullable(),
     })
     .nullable(),
+  // Phase 4b+ : multi-sensor Loxone readings, fetched server-side in one
+  // request. Widget calls this endpoint with the showInWidget sensor
+  // UUIDs as a comma-separated header (X-Loxone-Sensor-UUIDs).
+  smartHomeSensors: z
+    .array(
+      z.object({
+        uuid: z.string(),
+        name: z.string(),
+        temperature: z.number(),
+        timestamp: z.string().datetime(),
+      }),
+    )
+    .optional(),
   buildNumber: z.string().openapi({ example: '260707-1113' }),
   fetchedAt: z.string().datetime(),
 });
@@ -104,12 +117,23 @@ const getWidgetTimelineRoute = createRoute({
         .string()
         .optional()
         .openapi({ example: '504F94A1874F', description: 'Loxone Miniserver serial number' }),
+      'x-loxone-sensor-uuids': z
+        .string()
+        .optional()
+        .openapi({
+          example: '1b4bd480-0352-6c00-ffff0fb3607cf0ae,1b4bd480-0353-...',
+          description:
+            'Comma-separated list of Loxone temperature sensor UUIDs. ' +
+            'Backend fetches each in parallel and returns smartHomeSensors[].',
+        }),
+      // Legacy single-sensor header — kept for backward compat. The endpoint
+      // uses x-loxone-sensor-uuids when set, falls back to this.
       'x-loxone-sensor-uuid': z
         .string()
         .optional()
         .openapi({
           example: '1b4bd480-0352-6c00-ffff0fb3607cf0ae',
-          description: 'Loxone temperature sensor UUID',
+          description: 'Loxone temperature sensor UUID (deprecated)',
         }),
       'x-loxone-credentials': z
         .string()
@@ -220,6 +244,7 @@ widgetRouter.openapi(getWidgetTimelineRoute, async (c) => {
   const headers = c.req.valid('header');
   const loxoneSnr = headers['x-loxone-snr'];
   const loxoneSensorUuid = headers['x-loxone-sensor-uuid'];
+  const loxoneSensorUuidsHeader = headers['x-loxone-sensor-uuids'];
   const loxoneCredentials = headers['x-loxone-credentials'];
 
   // Weather: per-POI cache, shared across all callers.
@@ -264,31 +289,68 @@ widgetRouter.openapi(getWidgetTimelineRoute, async (c) => {
     setCache(weatherCache, weatherCacheKey, weatherData);
   }
 
-  // Loxone: only fetched if all three headers are set. Per-(snr,sensor)
-  // cache — the temperature reading is independent of the caller.
-  let smartHomeData: { temperature: number; timestamp: string } | null = null;
-  if (loxoneSnr && loxoneSensorUuid && loxoneCredentials) {
-    const loxoneCacheKey = `widget:timeline:loxe:${loxoneSnr}:${loxoneSensorUuid}`;
-    smartHomeData = getCached<{ temperature: number; timestamp: string }>(
-      loxoneCache,
-      loxoneCacheKey,
-    ) ?? null;
-    if (!smartHomeData) {
-      smartHomeData = await fetchLoxoneTemperature(
-        loxoneSnr,
-        loxoneSensorUuid,
-        loxoneCredentials,
+  // Loxone: fetch per-request. Per-(snr,sensor) cache — each reading is
+  // independent of the caller. x-loxone-sensor-uuids (multi) takes
+  // precedence over x-loxone-sensor-uuid (legacy single).
+  let smartHomeSensors: Array<{ uuid: string; name: string; temperature: number; timestamp: string }> | undefined;
+  let primarySmartHome: { temperature: number; timestamp: string } | null = null;
+  if (loxoneSnr && loxoneCredentials) {
+    // Multi-uuid path: comma-separated, trimmed
+    const headerUuids = loxoneSensorUuidsHeader
+      ? loxoneSensorUuidsHeader.split(',').map((s) => s.trim()).filter(Boolean)
+      : [];
+    // Fall back to legacy single-uuid header
+    const uuids = headerUuids.length > 0
+      ? headerUuids
+      : (loxoneSensorUuid ? [loxoneSensorUuid] : []);
+
+    if (uuids.length > 0) {
+      // Cache lookup + parallel fetch
+      const cached = uuids.map((uuid) =>
+        getCached<{ temperature: number; timestamp: string }>(
+          loxoneCache,
+          `widget:timeline:loxe:${loxoneSnr}:${uuid}`,
+        ),
       );
-      if (smartHomeData) setCache(loxoneCache, loxoneCacheKey, smartHomeData);
+      const missing = uuids.filter((_, i) => !cached[i]);
+      const fetched = await Promise.all(
+        missing.map((uuid) =>
+          fetchLoxoneTemperature(loxoneSnr, uuid, loxoneCredentials).then((r) => ({ uuid, r })),
+        ),
+      );
+      // Write back freshly-fetched values to cache
+      for (const { uuid, r } of fetched) {
+        if (r) {
+          setCache(loxoneCache, `widget:timeline:loxe:${loxoneSnr}:${uuid}`, r);
+        }
+      }
+      // Build the response array
+      const now = new Date().toISOString();
+      smartHomeSensors = uuids.map((uuid, i) => {
+        const reading = cached[i] ?? fetched.find((f) => f.uuid === uuid)?.r;
+        if (!reading) return null;
+        return {
+          uuid,
+          name: uuid, // Widget side resolves the name from the cached snapshot
+          temperature: reading.temperature,
+          timestamp: reading.timestamp,
+        };
+      }).filter((s): s is NonNullable<typeof s> => s !== null);
+      // Backward-compat primary: first sensor (or first with reading)
+      if (smartHomeSensors.length > 0) {
+        primarySmartHome = {
+          temperature: smartHomeSensors[0].temperature,
+          timestamp: smartHomeSensors[0].timestamp,
+        };
+      }
     }
   }
 
   return c.json(
     {
       ...weatherData,
-      smartHome: smartHomeData
-        ? { temperature: smartHomeData.temperature, timestamp: smartHomeData.timestamp }
-        : null,
+      smartHome: primarySmartHome,
+      smartHomeSensors,
       buildNumber: process.env.BUILD_NUMBER ?? 'dev',
       fetchedAt: new Date().toISOString(),
     },
