@@ -23,7 +23,8 @@
       "infoPlist": {
         "UIBackgroundModes": [
           "fetch"
-        ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
