@@ -18,7 +18,7 @@ export function DrawerContent(props: any) {
       {...props}
       contentContainerStyle={[
         styles.container,
-        { paddingTop: insets.top + Spacing.lg, backgroundColor: colors.background.primary },
+        { paddingTop: insets.top + Spacing.lg, backgroundColor: colors.background.grouped },
       ]}
     >
       <View style={styles.header}>

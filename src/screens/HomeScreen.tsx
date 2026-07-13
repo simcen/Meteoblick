@@ -26,7 +26,7 @@ export default function HomeScreen() {
   const styles = useMemo(
     () =>
       StyleSheet.create({
-        safeArea: { flex: 1, backgroundColor: colors.background.primary },
+        safeArea: { flex: 1, backgroundColor: colors.background.grouped },
         container: { flex: 1 },
         contentContainer: {
           paddingHorizontal: Spacing.screenHorizontal,

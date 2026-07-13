@@ -47,7 +47,7 @@ export default function SmartHomeScreen() {
   const styles = useMemo(
     () =>
       StyleSheet.create({
-        safeArea: { flex: 1, backgroundColor: colors.background.primary },
+        safeArea: { flex: 1, backgroundColor: colors.background.grouped },
         scrollView: { flex: 1 },
         contentContainer: {
           padding: Spacing.screenHorizontal,
