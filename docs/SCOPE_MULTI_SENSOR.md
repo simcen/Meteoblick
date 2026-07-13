@@ -222,16 +222,16 @@ No change. Hamburger / drawer stays.
 
 ## 8. Open decisions (need your call before I start)
 
-| # | Decision | Default if you say nothing |
+| # | Decision | Status |
 |---|---|---|
-| D1 | Sensor types: temperature only (matches today) OR all Loxone sensors? | **temperature only** |
-| D2 | Drag-to-reorder vs. simple ↑/↓ buttons? | **drag** with up/down fallback |
-| D3 | Rename sensor inline in config row (long-press) vs separate edit screen? | **inline long-press** |
-| D4 | Widget layout for medium (2-sensor): horizontal row vs vertical stack? | **horizontal row** |
-| D5 | Delete confirmation: explicit Alert or undo toast? | **explicit Alert** |
-| D6 | Pre-fill new sensor name from Loxone OR force user to name on add? | **pre-fill, editable** |
-| D7 | Cache strategy: last known good value per sensor if fetch fails? | **yes, show in italic + stale indicator** |
-| D8 | Sensor fetch: **also in widget timeline** (background). At minimum the `showInWidget` sensors; endpoint must accept a `string[]` of UUIDs so the widget can fetch only what it needs. App still fetches all sensors (for SmartHomeScreen), BG fetch also refreshes the snapshot as fallback. | (decided) |
+| D1 | Sensor types: **temperature only**. Other types (humidity, brightness, ...) tracked in BACKLOG. | decided |
+| D2 | **Drag** to reorder (long-press handle, then drag). | decided |
+| D3 | **Inline long-press** to rename — tap-and-hold the name field, Alert with TextInput. | decided |
+| D4 | Medium widget: **horizontal** layout (two sensors side-by-side). | decided |
+| D5 | Delete: **explicit Alert** ("Sensor wirklich löschen?"). | decided |
+| D6 | New sensor: **pre-fill** with Loxone name, **editable** inline in the list. | decided |
+| D7 | Fetch failure: keep current behavior — widget falls back to last App-Group snapshot value; app shows `—` placeholder. No new "italic + stale" indicator. | decided |
+| D8 | Sensor fetch: **also in widget timeline** (background). At minimum the `showInWidget` sensors; endpoint must accept a `string[]` of UUIDs so the widget can fetch only what it needs. App still fetches all sensors (for SmartHomeScreen), BG fetch also refreshes the snapshot as fallback. | decided |
 
 ## 9. Phasing & effort
 

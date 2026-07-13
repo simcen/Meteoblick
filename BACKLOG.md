@@ -14,23 +14,17 @@ values: `open` / `exploring` / `in-progress` / `done` / `reverted`.
 - Decision needed before implementation.
 
 ### Multi-Sensor Smart Home Support
-- Status: open — needs schema + UI design
-- Use case: today one Loxone temperature sensor feeds the widget. User wants to add e.g. pool temperature, plus per-sensor control over visibility.
-- Storage schema today (`SharedStorage.setLoxoneConfig`):
-  ```ts
-  { cloudAddress, username, password, temperatureSensorUUID?, temperatureSensorName?, enabled }
-  ```
-  Would need to become an array:
-  ```ts
-  type Sensor = { uuid: string; name: string; showInApp: boolean; showInWidget: boolean };
-  type LoxoneConfig = { cloudAddress, username, password, sensors: Sensor[]; enabled: boolean };
-  ```
-- Widget design constraints (iOS 17/26):
-  - `systemSmall` ≈ 158×158 pt — fits 1 reading + label cleanly
-  - `systemMedium` ≈ 338×158 pt — fits 2 readings side-by-side, or 1 + meta
-  - `systemLarge` ≈ 338×354 pt — fits 4-6 readings
-- Open question: cap at N sensors per widget family? Suggest 1 for small, 2 for medium, 6 for large. Configurable in app.
-- Migration: existing single-sensor configs need to migrate forward without losing data.
+- Status: scoped (`docs/SCOPE_MULTI_SENSOR.md`), awaiting Phase 1 start
+- MVP scope: array of `{ uuid, name, showInApp, showInWidget, order }` sensors.
+  Widget layout per family (small=1, medium=2, large=up to 6) selected top-N by
+  `order` from `showInWidget` sensors. Widget timeline fetches its own sensors
+  via flexible `getTemperatures(uuids[])` endpoint.
+- Out of MVP scope (deferred):
+  - **Sensor types beyond temperature** (humidity, brightness, etc.) — explicit
+    decision per D1
+  - Sensor history / charts
+  - Per-widget-family sensor selection
+  - Threshold notifications
 
 ### Drawer → Stack (experimental)
 - Status: open — exploratory, may revert
@@ -53,6 +47,16 @@ These pre-date the backlog; revisit when picking up the related work.
 - **V1 widget content** — CLAUDE.md asked which 3-5 parameters to show in the widget. Today we show: location name, current temp, forecast temp, precipitation. Wind, pictogram, min/max not yet on the widget.
 - **POI search UX** — interactive search in app, or one-time via settings? Today: one-time (Settings → Orte).
 - **V2 Smart Home backend** — Home Assistant or Loxone? Today: Loxone only. CLAUDE.md's open question.
+
+## Deferred from Multi-Sensor scope
+
+- **Other Loxone sensor types** (humidity, brightness, ...) — deferred per scope
+  decision D1. Needs generic `getValue(uuid, type)`, type-aware storage,
+  sensor-specific units + symbols in UI.
+- **Sensor history / time-series** — needs either local time-series storage or
+  backend integration. Probably needs backend first.
+- **Per-widget-family sensor selection** — current MVP uses one global order
+  capped by family size. Users might want different sensors in small vs large.
 
 ## Done (recent shipped work)
 
