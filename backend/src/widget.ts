@@ -289,71 +289,111 @@ widgetRouter.openapi(getWidgetTimelineRoute, async (c) => {
     setCache(weatherCache, weatherCacheKey, weatherData);
   }
 
-  // Loxone: fetch per-request. Per-(snr,sensor) cache — each reading is
-  // independent of the caller. x-loxone-sensor-uuids (multi) takes
-  // precedence over x-loxone-sensor-uuid (legacy single).
-  let smartHomeSensors: Array<{ uuid: string; name: string; temperature: number; timestamp: string }> | undefined;
-  let primarySmartHome: { temperature: number; timestamp: string } | null = null;
-  if (loxoneSnr && loxoneCredentials) {
-    // Multi-uuid path: comma-separated, trimmed
-    const headerUuids = loxoneSensorUuidsHeader
-      ? loxoneSensorUuidsHeader.split(',').map((s) => s.trim()).filter(Boolean)
-      : [];
-    // Fall back to legacy single-uuid header
-    const uuids = headerUuids.length > 0
-      ? headerUuids
-      : (loxoneSensorUuid ? [loxoneSensorUuid] : []);
-
-    if (uuids.length > 0) {
-      // Cache lookup + parallel fetch
-      const cached = uuids.map((uuid) =>
-        getCached<{ temperature: number; timestamp: string }>(
-          loxoneCache,
-          `widget:timeline:loxe:${loxoneSnr}:${uuid}`,
-        ),
-      );
-      const missing = uuids.filter((_, i) => !cached[i]);
-      const fetched = await Promise.all(
-        missing.map((uuid) =>
-          fetchLoxoneTemperature(loxoneSnr, uuid, loxoneCredentials).then((r) => ({ uuid, r })),
-        ),
-      );
-      // Write back freshly-fetched values to cache
-      for (const { uuid, r } of fetched) {
-        if (r) {
-          setCache(loxoneCache, `widget:timeline:loxe:${loxoneSnr}:${uuid}`, r);
-        }
-      }
-      // Build the response array
-      const now = new Date().toISOString();
-      smartHomeSensors = uuids.map((uuid, i) => {
-        const reading = cached[i] ?? fetched.find((f) => f.uuid === uuid)?.r;
-        if (!reading) return null;
-        return {
-          uuid,
-          name: uuid, // Widget side resolves the name from the cached snapshot
-          temperature: reading.temperature,
-          timestamp: reading.timestamp,
-        };
-      }).filter((s): s is NonNullable<typeof s> => s !== null);
-      // Backward-compat primary: first sensor (or first with reading)
-      if (smartHomeSensors.length > 0) {
-        primarySmartHome = {
-          temperature: smartHomeSensors[0].temperature,
-          timestamp: smartHomeSensors[0].timestamp,
-        };
-      }
-    }
-  }
+  // Loxone: multi-sensor if x-loxone-sensor-uuids is set, else fall back
+  // to legacy x-loxone-sensor-uuid. Per-(snr,sensor) cache so each reading
+  // is independent of the caller.
+  const loxoneResult = await fetchLoxoneMultiSensor({
+    snr: loxoneSnr,
+    credentials: loxoneCredentials,
+    multiHeader: loxoneSensorUuidsHeader,
+    legacySingleUuid: loxoneSensorUuid,
+  });
 
   return c.json(
     {
       ...weatherData,
-      smartHome: primarySmartHome,
-      smartHomeSensors,
+      smartHome: loxoneResult.primary,
+      smartHomeSensors: loxoneResult.sensors,
       buildNumber: process.env.BUILD_NUMBER ?? 'dev',
       fetchedAt: new Date().toISOString(),
     },
     200,
   );
 });
+
+// ─── Exported helpers (testable) ───────────────────────────────────
+
+/**
+ * Parse sensor UUIDs from the request headers.
+ * Multi-uuid header takes precedence; falls back to legacy single-uuid
+ * header. Comma-separated multi-uuid is trimmed + empty filtered.
+ * Exported for unit testing.
+ */
+export function parseSensorUuids(
+  multiHeader: string | undefined,
+  legacySingleUuid: string | undefined,
+): string[] {
+  const fromMulti = multiHeader
+    ? multiHeader.split(',').map((s) => s.trim()).filter(Boolean)
+    : [];
+  if (fromMulti.length > 0) return fromMulti;
+  return legacySingleUuid ? [legacySingleUuid] : [];
+}
+
+/**
+ * Fetch multiple Loxone sensor temperatures in parallel with per-sensor
+ * caching. Returns the built response array + a legacy single-sensor
+ * "primary" for backward compat. Exported for unit testing.
+ */
+export async function fetchLoxoneMultiSensor(opts: {
+  snr: string | undefined;
+  credentials: string | undefined;
+  multiHeader: string | undefined;
+  legacySingleUuid: string | undefined;
+}): Promise<{
+  primary: { temperature: number; timestamp: string } | null;
+  sensors: Array<{ uuid: string; name: string; temperature: number; timestamp: string }> | undefined;
+}> {
+  if (!opts.snr || !opts.credentials) {
+    return { primary: null, sensors: undefined };
+  }
+  const uuids = parseSensorUuids(opts.multiHeader, opts.legacySingleUuid);
+  if (uuids.length === 0) {
+    return { primary: null, sensors: undefined };
+  }
+
+  // Cache lookup per uuid
+  const cached = uuids.map((uuid) =>
+    getCached<{ temperature: number; timestamp: string }>(
+      loxoneCache,
+      `widget:timeline:loxe:${opts.snr}:${uuid}`,
+    ),
+  );
+  const missingIdx = uuids
+    .map((uuid, i) => (cached[i] ? -1 : i))
+    .filter((i) => i >= 0);
+  const missing = missingIdx.map((i) => uuids[i]);
+
+  const fetched = await Promise.all(
+    missing.map((uuid) =>
+      fetchLoxoneTemperature(opts.snr!, uuid, opts.credentials!).then((r) => ({ uuid, r })),
+    ),
+  );
+
+  // Write back freshly-fetched values to cache
+  for (const { uuid, r } of fetched) {
+    if (r) setCache(loxoneCache, `widget:timeline:loxe:${opts.snr}:${uuid}`, r);
+  }
+
+  // Build the response array, skipping any uuid whose fetch failed (no
+  // cached and no fresh value).
+  const sensors = uuids
+    .map((uuid, i) => {
+      const reading = cached[i] ?? fetched.find((f) => f.uuid === uuid)?.r;
+      if (!reading) return null;
+      return {
+        uuid,
+        name: uuid, // Widget resolves real name from its cached snapshot
+        temperature: reading.temperature,
+        timestamp: reading.timestamp,
+      };
+    })
+    .filter((s): s is NonNullable<typeof s> => s !== null);
+
+  const primary =
+    sensors.length > 0
+      ? { temperature: sensors[0].temperature, timestamp: sensors[0].timestamp }
+      : null;
+
+  return { primary, sensors };
+}
