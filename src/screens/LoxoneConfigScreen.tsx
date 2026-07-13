@@ -52,13 +52,9 @@ export default function LoxoneConfigScreen() {
 
   const [enabled, setEnabled] = useState(false);
   const [cloudAddress, setCloudAddress] = useState('504F94A1874F');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
   const [sensors, setSensors] = useState<Sensor[]>([]);
-  const [showConnection, setShowConnection] = useState(true);
-  const [loading, setLoading] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [configSaved, setConfigSaved] = useState(false);
+  // Connection edit lives in LoxoneConnectionScreen (separate modal).
+  // Here we just show a summary card with the SNR + chevron to navigate.
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   const styles = useMemo(
@@ -199,6 +195,33 @@ export default function LoxoneConfigScreen() {
           ...Typography.headline,
           color: colors.tint,
         },
+        // Connection summary card — navigates to LoxoneConnection on tap
+        connectionCardRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingVertical: Spacing.sm,
+        },
+        connectionCardMain: { flex: 1 },
+        connectionCardSnr: {
+          ...Typography.body,
+          color: colors.label.primary,
+          fontWeight: '500',
+        },
+        connectionCardEmpty: {
+          ...Typography.body,
+          color: colors.label.tertiary,
+          fontStyle: 'italic',
+        },
+        connectionCardMeta: {
+          ...Typography.caption2,
+          color: colors.label.secondary,
+          marginTop: 2,
+        },
+        connectionCardChevron: {
+          fontSize: 24,
+          color: colors.label.tertiary,
+          marginLeft: Spacing.sm,
+        },
         actions: { marginTop: Spacing.lg, gap: Spacing.md },
         infoSection: {
           marginTop: Spacing.xl,
@@ -222,61 +245,31 @@ export default function LoxoneConfigScreen() {
     if (config) {
       setEnabled(config.enabled);
       setCloudAddress(config.cloudAddress);
-      setUsername(config.username);
-      setPassword(config.password);
       setSensors(config.sensors);
-      if (config.enabled && config.sensors.length > 0) {
-        setConfigSaved(true);
-        setShowConnection(false);
-      }
     }
     setHasLoadedOnce(true);
   };
 
-  // ─── Master toggle: persist enabled + sensors immediately ───────
-  const persistNow = useCallback(
-    async (next: { enabled?: boolean; sensors?: Sensor[]; cloudAddress?: string; username?: string; password?: string }) => {
-      const cfg = await SharedStorage.getLoxoneConfig();
-      if (!cfg) {
-        // No existing config — save a fresh one with current inputs
-        await SharedStorage.setLoxoneConfig({
-          cloudAddress: next.cloudAddress ?? cloudAddress,
-          username: next.username ?? username,
-          password: next.password ?? password,
-          enabled: next.enabled ?? enabled,
-          sensors: next.sensors ?? sensors,
-        });
-      } else {
-        await SharedStorage.setLoxoneConfig({
-          ...cfg,
-          ...next,
-        });
-      }
-    },
-    [cloudAddress, username, password, enabled, sensors],
-  );
-
-  // ─── Connection test (unchanged behavior) ────────────────────────
-  const testConnection = async () => {
-    if (!username || !password) {
-      Alert.alert('Fehler', 'Bitte Username und Passwort eingeben');
-      return;
-    }
-    setTesting(true);
+  // ─── Master toggle: persist enabled immediately (sensors persist
+  //    via granular ops from the row UI) ─────────────────────────
+  const toggleEnabled = async (value: boolean) => {
+    setEnabled(value);
     try {
-      const api = new LoxoneAPI({ cloudAddress, username, password });
-      const connection = await api.getConnection();
-      const connectionType = connection.type === 'local' ? 'Lokal' : 'Cloud';
-      Alert.alert(
-        'Verbindung erfolgreich',
-        `Typ: ${connectionType}\nURL: ${connection.baseURL}\n\nDie Verbindung zum Loxone Miniserver funktioniert!`,
-      );
-    } catch (error: any) {
-      Alert.alert('Verbindung fehlgeschlagen', error.message || 'Unbekannter Fehler');
-    } finally {
-      setTesting(false);
+      const existing = await SharedStorage.getLoxoneConfig();
+      if (!existing) return;
+      await SharedStorage.setLoxoneConfig({ ...existing, enabled: value });
+      if (!value) refreshWeather();
+    } catch (error) {
+      console.warn('[LoxoneConfig] Toggle persist failed:', error);
     }
   };
+
+  // ─── Navigation to connection edit screen ──────────────────────
+  const openConnectionEdit = () => {
+    (navigation as any).navigate('LoxoneConnection');
+  };
+
+
 
   // ─── Sensor row actions (Phase 2.1) ─────────────────────────────
   const onDragEnd = async ({ data }: { data: Sensor[] }) => {
@@ -343,8 +336,8 @@ export default function LoxoneConfigScreen() {
   // ─── Sensor picker (Phase 2.2) ──────────────────────────────────
   const [pickerVisible, setPickerVisible] = useState(false);
   const openPicker = () => {
-    if (!username || !password) {
-      Alert.alert('Fehler', 'Bitte zuerst Username und Passwort eingeben');
+    if (!cloudAddress) {
+      Alert.alert('Fehler', 'Bitte zuerst eine Verbindung konfigurieren.');
       return;
     }
     setPickerVisible(true);
@@ -359,53 +352,6 @@ export default function LoxoneConfigScreen() {
     });
     if (updated) setSensors(updated.sensors);
     await refreshWeather();
-  };
-
-  // ─── Save (master + sensors) ────────────────────────────────────
-  const saveConfig = async () => {
-    setLoading(true);
-    try {
-      await SharedStorage.setLoxoneConfig({
-        cloudAddress,
-        username,
-        password,
-        enabled,
-        sensors,
-      });
-      await refreshWeather();
-      setConfigSaved(true);
-      setShowConnection(false);
-      Alert.alert('Gespeichert', 'Loxone Konfiguration wurde gespeichert.');
-    } catch (error: any) {
-      Alert.alert('Fehler', 'Konnte Konfiguration nicht speichern');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const deleteConfig = () => {
-    Alert.alert(
-      'Konfiguration löschen?',
-      'Möchtest du die Loxone Konfiguration wirklich komplett löschen?',
-      [
-        { text: 'Abbrechen', style: 'cancel' },
-        {
-          text: 'Löschen',
-          style: 'destructive',
-          onPress: async () => {
-            await SharedStorage.deleteLoxoneConfig();
-            await refreshWeather();
-            setEnabled(false);
-            setUsername('');
-            setPassword('');
-            setSensors([]);
-            setConfigSaved(false);
-            setShowConnection(true);
-            Alert.alert('Gelöscht', 'Loxone Konfiguration wurde gelöscht.');
-          },
-        },
-      ],
-    );
   };
 
   return (
@@ -434,86 +380,39 @@ export default function LoxoneConfigScreen() {
             </View>
             <Switch
               value={enabled}
-              onValueChange={async (value) => {
-                setEnabled(value);
-                try {
-                  const existing = await SharedStorage.getLoxoneConfig();
-                  if (!existing) return;
-                  await SharedStorage.setLoxoneConfig({ ...existing, enabled: value });
-                  if (!value) refreshWeather();
-                } catch (error) {
-                  console.warn('[LoxoneConfig] Toggle persist failed:', error);
-                }
-              }}
+              onValueChange={toggleEnabled}
               trackColor={{ false: colors.separator.opaque, true: colors.tint }}
               thumbColor={colors.background.primary}
             />
           </View>
         </View>
 
-        {/* Connection section (collapsible) */}
-        <View style={styles.section}>
-          <TouchableOpacity
-            style={styles.sectionHeader}
-            onPress={() => setShowConnection(!showConnection)}
-          >
-            <Text style={styles.sectionTitle}>
-              {showConnection ? '▼' : '▶'} Verbindung
-            </Text>
-            {configSaved && !showConnection && (
-              <Text style={[Typography.subheadline, { color: colors.tint, fontWeight: '600' }]}>
-                ✓ {cloudAddress}
-              </Text>
-            )}
-          </TouchableOpacity>
-
-          {showConnection && (
-            <View>
-              <Text style={styles.inputLabel}>Cloud-Adresse (SNR)</Text>
-              <TextInput
-                style={styles.input}
-                value={cloudAddress}
-                onChangeText={setCloudAddress}
-                placeholder="z.B. 504F94A1874F"
-                placeholderTextColor={colors.label.tertiary}
-                autoCapitalize="characters"
-                editable={!loading}
-              />
-
-              <Text style={styles.inputLabel}>Benutzername</Text>
-              <TextInput
-                style={styles.input}
-                value={username}
-                onChangeText={setUsername}
-                placeholder="Miniserver Benutzer"
-                placeholderTextColor={colors.label.tertiary}
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!loading}
-              />
-
-              <Text style={styles.inputLabel}>Passwort</Text>
-              <TextInput
-                style={styles.input}
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Miniserver Passwort"
-                placeholderTextColor={colors.label.tertiary}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!loading}
-              />
-
-              <Button
-                title="Verbindung testen"
-                onPress={testConnection}
-                disabled={!username || !password || testing}
-                loading={testing}
-              />
+        {/* Connection section (always visible, no collapse) */}
+        {/* Connection summary card — navigates to LoxoneConnection on tap */}
+        <TouchableOpacity
+          style={styles.section}
+          onPress={openConnectionEdit}
+          accessibilityRole="button"
+          accessibilityLabel="Verbindung bearbeiten"
+        >
+          <View style={styles.connectionCardRow}>
+            <View style={styles.connectionCardMain}>
+              {cloudAddress ? (
+                <>
+                  <Text style={styles.connectionCardSnr}>{cloudAddress}</Text>
+                  <Text style={styles.connectionCardMeta}>
+                    {enabled ? 'Aktiviert' : 'Deaktiviert'}
+                  </Text>
+                </>
+              ) : (
+                <Text style={styles.connectionCardEmpty}>
+                  Keine Verbindung konfiguriert
+                </Text>
+              )}
             </View>
-          )}
-        </View>
+            <Text style={styles.connectionCardChevron}>›</Text>
+          </View>
+        </TouchableOpacity>
 
         {/* Sensor list (Phase 2.1) */}
         <View style={styles.section}>
@@ -610,25 +509,11 @@ export default function LoxoneConfigScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Save / Delete actions */}
-        <View style={styles.actions}>
-          <Button
-            title="Konfiguration speichern"
-            onPress={saveConfig}
-            disabled={loading}
-            loading={loading}
-            fullWidth
-          />
-          {configSaved && (
-            <Button title="Konfiguration löschen" onPress={deleteConfig} fullWidth variant="secondary" />
-          )}
-        </View>
-
-        {hasLoadedOnce && !configSaved && (
+        {hasLoadedOnce && (
           <View style={styles.infoSection}>
             <Text style={styles.infoTitle}>Hinweise:</Text>
             <Text style={styles.infoText}>
-              • Verbindung testen, dann Sensoren aus dem Miniserver hinzufügen{'\n'}
+              • Verbindung oben konfigurieren (Cloud-SNR, Zugangsdaten){'\n'}
               • App-Schalter: zeigt den Sensor in der Smart-Home-Tab{'\n'}
               • Widget-Schalter: zeigt den Sensor im iOS-Widget
             </Text>
@@ -639,9 +524,6 @@ export default function LoxoneConfigScreen() {
       {/* Sensor picker modal (Phase 2.2) */}
       <LoxoneSensorPicker
         visible={pickerVisible}
-        cloudAddress={cloudAddress}
-        username={username}
-        password={password}
         existingUuids={sensors.map((s) => s.uuid)}
         onClose={() => setPickerVisible(false)}
         onSelect={handleSensorPicked}
@@ -653,24 +535,20 @@ export default function LoxoneConfigScreen() {
 /**
  * LoxoneSensorPicker — modal that scans the configured Loxone Miniserver
  * for temperature sensors and lets the user add one to the configured list.
- * Already-configured UUIDs are filtered out so the user can't add duplicates.
+ * Reads its own credentials + cloud address from SharedStorage so the
+ * parent doesn't need to forward them. Already-configured UUIDs are
+ * filtered out so the user can't add duplicates.
  *
  * Phase 2.2: name = Loxone name on add (D6 pre-fill, editable later).
  * Filters by name / room / type via a search field.
  */
 function LoxoneSensorPicker({
   visible,
-  cloudAddress,
-  username,
-  password,
   existingUuids,
   onClose,
   onSelect,
 }: {
   visible: boolean;
-  cloudAddress: string;
-  username: string;
-  password: string;
   existingUuids: string[];
   onClose: () => void;
   onSelect: (sensor: { uuid: string; name: string }) => void;
@@ -678,8 +556,8 @@ function LoxoneSensorPicker({
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [sensors, setSensors] = useState<{ uuid: string; name: string; room: string; type: string; category: string }[]>([]);
-  const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -688,7 +566,16 @@ function LoxoneSensorPicker({
     (async () => {
       setLoading(true);
       try {
-        const api = new LoxoneAPI({ cloudAddress, username, password });
+        const cfg = await SharedStorage.getLoxoneConfig();
+        if (!cfg) {
+          Alert.alert('Nicht konfiguriert', 'Bitte zuerst die Loxone Verbindung konfigurieren.');
+          return;
+        }
+        const api = new LoxoneAPI({
+          cloudAddress: cfg.cloudAddress,
+          username: cfg.username,
+          password: cfg.password,
+        });
         const found = await api.getTemperatureSensors();
         if (cancelled) return;
         const available = found.filter((s) => !existingUuids.includes(s.uuid));
@@ -704,7 +591,7 @@ function LoxoneSensorPicker({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
+  }, [visible, existingUuids.join(",")]);
 
   const styles = useMemo(
     () =>
