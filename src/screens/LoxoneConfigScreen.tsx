@@ -26,6 +26,7 @@ import DraggableFlatList, {
   RenderItemParams,
   ScaleDecorator,
 } from 'react-native-draggable-flatlist';
+import { Swipeable } from 'react-native-gesture-handler';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { SharedStorage } from '../storage/SharedStorage';
@@ -162,13 +163,18 @@ export default function LoxoneConfigScreen() {
           color: colors.label.secondary,
           marginBottom: 2,
         },
-        sensorDeleteBtn: {
-          paddingHorizontal: Spacing.sm,
-          paddingVertical: Spacing.xs,
+        // Swipe-to-delete action — red background with label
+        sensorSwipeAction: {
+          backgroundColor: colors.accent.red,
+          justifyContent: 'center',
+          alignItems: 'center',
+          width: 96,
+          paddingHorizontal: Spacing.md,
         },
-        sensorDeleteBtnText: {
-          fontSize: 18,
-          color: colors.accent.red,
+        sensorSwipeActionText: {
+          ...Typography.headline,
+          color: '#FFFFFF',
+          fontWeight: '600',
         },
         emptyState: {
           paddingVertical: Spacing.lg,
@@ -419,65 +425,71 @@ export default function LoxoneConfigScreen() {
               scrollEnabled={false}
               renderItem={({ item, drag, isActive }: RenderItemParams<Sensor>) => (
                 <ScaleDecorator>
-                  <TouchableOpacity
-                    onLongPress={drag}
-                    delayLongPress={150}
-                    disabled={isActive}
-                    style={[styles.sensorRow, isActive && { opacity: 0.85 }]}
-                  >
-                    {/* Drag handle — three-stripe icon (☰) on the left */}
-                    <View style={styles.sensorDragHandle} pointerEvents="none">
-                      <Text style={styles.sensorDragHandleIcon}>≡</Text>
-                    </View>
-
-                    {/* Name + meta */}
-                    <View style={styles.sensorMain}>
+                  <Swipeable
+                    renderRightActions={() => (
                       <TouchableOpacity
-                        onLongPress={() => renameSensor(item.uuid)}
-                        delayLongPress={500}
+                        style={styles.sensorSwipeAction}
+                        onPress={() => deleteSensorWithConfirm(item.uuid)}
                         accessibilityRole="button"
-                        accessibilityLabel={`${item.name} umbenennen, lange drücken`}
-                        accessibilityHint="Lange drücken zum Umbenennen"
+                        accessibilityLabel={`${item.name} löschen`}
                       >
-                        <Text style={styles.sensorName} numberOfLines={1}>
-                          {item.name}
-                        </Text>
+                        <Text style={styles.sensorSwipeActionText}>Löschen</Text>
                       </TouchableOpacity>
-                    </View>
-
-                    {/* Flags: in-app + in-widget */}
-                    <View style={styles.sensorFlags}>
-                      <View style={styles.sensorFlag}>
-                        <Text style={styles.sensorFlagLabel}>App</Text>
-                        <Switch
-                          value={item.showInApp}
-                          onValueChange={() => toggleShowInApp(item.uuid)}
-                          trackColor={{ false: colors.separator.opaque, true: colors.tint }}
-                          thumbColor={colors.background.primary}
-                        />
-                      </View>
-                      <View style={styles.sensorFlag}>
-                        <Text style={styles.sensorFlagLabel}>Widget</Text>
-                        <Switch
-                          value={item.showInWidget}
-                          onValueChange={() => toggleShowInWidget(item.uuid)}
-                          trackColor={{ false: colors.separator.opaque, true: colors.tint }}
-                          thumbColor={colors.background.primary}
-                        />
-                      </View>
-                    </View>
-
-                    {/* Delete */}
+                    )}
+                    friction={2}
+                    rightThreshold={48}
+                    overshootRight={false}
+                  >
                     <TouchableOpacity
-                      onPress={() => deleteSensorWithConfirm(item.uuid)}
-                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                      accessibilityLabel={`${item.name} löschen`}
-                      accessibilityRole="button"
-                      style={styles.sensorDeleteBtn}
+                      onLongPress={drag}
+                      delayLongPress={150}
+                      disabled={isActive}
+                      activeOpacity={0.85}
+                      style={[styles.sensorRow, isActive && { opacity: 0.85 }]}
                     >
-                      <Text style={styles.sensorDeleteBtnText}>✕</Text>
+                      {/* Drag handle — three-stripe icon (☰) on the left */}
+                      <View style={styles.sensorDragHandle} pointerEvents="none">
+                        <Text style={styles.sensorDragHandleIcon}>≡</Text>
+                      </View>
+
+                      {/* Name */}
+                      <View style={styles.sensorMain}>
+                        <TouchableOpacity
+                          onLongPress={() => renameSensor(item.uuid)}
+                          delayLongPress={500}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${item.name} umbenennen, lange drücken`}
+                          accessibilityHint="Lange drücken zum Umbenennen"
+                        >
+                          <Text style={styles.sensorName} numberOfLines={1}>
+                            {item.name}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {/* Flags: in-app + in-widget */}
+                      <View style={styles.sensorFlags}>
+                        <View style={styles.sensorFlag}>
+                          <Text style={styles.sensorFlagLabel}>App</Text>
+                          <Switch
+                            value={item.showInApp}
+                            onValueChange={() => toggleShowInApp(item.uuid)}
+                            trackColor={{ false: colors.separator.opaque, true: colors.tint }}
+                            thumbColor={colors.background.primary}
+                          />
+                        </View>
+                        <View style={styles.sensorFlag}>
+                          <Text style={styles.sensorFlagLabel}>Widget</Text>
+                          <Switch
+                            value={item.showInWidget}
+                            onValueChange={() => toggleShowInWidget(item.uuid)}
+                            trackColor={{ false: colors.separator.opaque, true: colors.tint }}
+                            thumbColor={colors.background.primary}
+                          />
+                        </View>
+                      </View>
                     </TouchableOpacity>
-                  </TouchableOpacity>
+                  </Swipeable>
                 </ScaleDecorator>
               )}
             />
