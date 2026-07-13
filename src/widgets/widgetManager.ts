@@ -90,11 +90,14 @@ export async function fetchAndWriteWidgetTimeline(): Promise<void> {
     }
 
     // Build headers for Loxone (if configured + enabled)
+    // Phase 1: mirror only the first showInWidget sensor (legacy compat).
+    // Phase 4b will overhaul to pass the full showInWidget sensor array.
     const headers: Record<string, string> = {};
     const loxoneConfig = await SharedStorage.getLoxoneConfig();
-    if (loxoneConfig?.enabled && loxoneConfig.temperatureSensorUUID) {
+    const widgetSensorUuid = loxoneConfig?.sensors.find((s) => s.showInWidget)?.uuid;
+    if (loxoneConfig?.enabled && widgetSensorUuid) {
       headers['X-Loxone-SNR'] = loxoneConfig.cloudAddress;
-      headers['X-Loxone-Sensor-Uuid'] = loxoneConfig.temperatureSensorUUID;
+      headers['X-Loxone-Sensor-Uuid'] = widgetSensorUuid;
       const credentials = btoa(`${loxoneConfig.username}:${loxoneConfig.password}`);
       headers['X-Loxone-Credentials'] = `Basic ${credentials}`;
     }

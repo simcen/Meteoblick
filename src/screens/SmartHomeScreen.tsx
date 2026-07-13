@@ -113,7 +113,7 @@ export default function SmartHomeScreen() {
         if (cancelled || !config) return;
         setEnabled(config.enabled);
         setCloudAddress(config.cloudAddress);
-        setSensorName(config.temperatureSensorName ?? null);
+        setSensorName(config.sensors.find((s) => s.showInApp)?.name ?? null);
         setHasConfig(true);
       })();
       return () => {

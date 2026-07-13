@@ -201,10 +201,11 @@ export default function DebugScreen() {
     let loxoneFresh = false;
 
     const loxoneConfig = await SharedStorage.getLoxoneConfig();
-    if (loxoneConfig?.enabled && loxoneConfig.temperatureSensorUUID) {
+    const primarySensorUuid = loxoneConfig?.sensors.find((s) => s.showInApp)?.uuid;
+    if (loxoneConfig?.enabled && primarySensorUuid) {
       try {
         const api = new LoxoneAPI(loxoneConfig);
-        const temp = await api.getTemperature(loxoneConfig.temperatureSensorUUID);
+        const temp = await api.getTemperature(primarySensorUuid);
         loxoneTemp = temp;
         loxoneTimestamp = new Date().toISOString();
         await SharedStorage.setLoxoneSensorData({
@@ -378,7 +379,7 @@ export default function DebugScreen() {
                 <View style={styles.debugRow}>
                   <Text style={styles.debugLabel}>Sensor UUID:</Text>
                   <Text style={[styles.debugValue, styles.uuidText]} numberOfLines={1}>
-                    {loxoneConfig.temperatureSensorUUID || 'n/a'}
+                    {loxoneConfig.sensors.find((s) => s.showInApp)?.uuid || 'n/a'}
                   </Text>
                 </View>
               </>

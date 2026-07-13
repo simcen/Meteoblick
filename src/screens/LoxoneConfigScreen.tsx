@@ -3,13 +3,11 @@
  *
  * Reached from Settings > Smart Home. Owns:
  * - Connection credentials (cloud SNR, username, password)
- * - Sensor selection (load sensors, pick one, preview live temperature)
- * - Save / edit / delete the configuration
- * - Enable/disable toggle (this is also accessible from the read-only
- *   SmartHome tab for quick toggling without opening this screen)
+ * - Sensor list: ordered, per-sensor flags (in-app / in-widget), rename, delete
+ * - Master enable/disable toggle
  *
- * On save, persists the sensor name as `temperatureSensorName` so the
- * read-only SmartHomeScreen can display it without re-fetching.
+ * Phase 2.1: multi-sensor rows with reorder + flags + delete (no add/rename yet —
+ * those land in Phase 2.2 / 2.3).
  */
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
@@ -21,47 +19,88 @@ import {
   ActivityIndicator,
   Switch,
   TouchableOpacity,
+  ScrollView,
 } from 'react-native';
-import Animated, { useAnimatedScrollHandler } from 'react-native-reanimated';
+import DraggableFlatList, {
+  RenderItemParams,
+  ScaleDecorator,
+} from 'react-native-draggable-flatlist';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { SharedStorage } from '../storage/SharedStorage';
-import { LoxoneAPI, type LoxoneTemperatureSensor } from '../api/loxone';
+import { LoxoneAPI } from '../api/loxone';
 import { useWeather } from '../providers/WeatherContext';
-import { useScrollContext } from '../contexts/ScrollContext';
 import { Button } from '../components/Button';
+import { LiquidGlassCloseButton } from '../components/LiquidGlassCloseButton';
 import { Typography, Spacing, Layout } from '../constants/designSystem';
 import { useColors } from '../hooks/useColors';
+
+type Sensor = {
+  uuid: string;
+  name: string;
+  showInApp: boolean;
+  showInWidget: boolean;
+  order: number;
+};
 
 export default function LoxoneConfigScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const colors = useColors();
   const { refresh: refreshWeather } = useWeather();
-  const { sharedScrollY } = useScrollContext();
+
+  const [enabled, setEnabled] = useState(false);
+  const [cloudAddress, setCloudAddress] = useState('504F94A1874F');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [sensors, setSensors] = useState<Sensor[]>([]);
+  const [showConnection, setShowConnection] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [configSaved, setConfigSaved] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   const styles = useMemo(
     () =>
       StyleSheet.create({
-        safeArea: { flex: 1, backgroundColor: colors.background.primary },
-        closeRow: {
+        safeArea: { flex: 1, backgroundColor: colors.background.grouped },
+        headerRow: {
           flexDirection: 'row',
-          paddingHorizontal: Spacing.sm,
-          paddingBottom: Spacing.sm,
+          alignItems: 'center',
+          paddingTop: insets.top + Spacing.sm,
+          paddingBottom: 0,
+          paddingHorizontal: Spacing.md,
         },
-        closeButton: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
-        closeIcon: { fontSize: 18, color: colors.label.primary, lineHeight: 20 },
-        scrollView: { flex: 1 },
-        contentContainer: { padding: Spacing.screenHorizontal, paddingBottom: Spacing.lg },
-        header: { marginBottom: Spacing.lg },
-        title: { ...Typography.title2, color: colors.label.primary, marginBottom: Spacing.xs },
-        subtitle: { ...Typography.subheadline, color: colors.label.secondary },
-        section: { marginBottom: Spacing.xl },
-        sectionTitle: {
-          ...Typography.headline,
+        headerSpacer: { width: 92 }, // matches LiquidGlassCloseButton minWidth
+        headerTitle: {
+          flex: 1,
+          textAlign: 'center',
+          ...Typography.title2,
+          lineHeight: 36, // match button box height
           color: colors.label.primary,
-          marginBottom: Spacing.md,
         },
+        scrollView: { flex: 1 },
+        contentContainer: {
+          paddingHorizontal: Spacing.screenHorizontal,
+          paddingTop: Spacing.md, // matches Debug screen's spacing
+          paddingBottom: Spacing.lg,
+        },
+        title: { ...Typography.title2, color: colors.label.primary, marginBottom: Spacing.xs },
+        subtitle: { ...Typography.subheadline, color: colors.label.secondary, marginBottom: Spacing.lg },
+        section: {
+          backgroundColor: colors.background.groupedSecondary,
+          borderRadius: Layout.radius.lg,
+          paddingHorizontal: Spacing.md,
+          paddingVertical: Spacing.sm,
+          marginBottom: Spacing.lg,
+        },
+        sectionHeader: {
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          paddingVertical: Spacing.sm,
+        },
+        sectionTitle: { ...Typography.headline, color: colors.label.primary, marginBottom: Spacing.md },
         toggleRow: {
           flexDirection: 'row',
           justifyContent: 'space-between',
@@ -79,7 +118,7 @@ export default function LoxoneConfigScreen() {
         },
         input: {
           ...Typography.body,
-          backgroundColor: colors.background.secondary,
+          backgroundColor: colors.fill.tertiary,
           borderRadius: Layout.radius.md,
           borderWidth: Layout.border.normal,
           borderColor: colors.separator.opaque,
@@ -88,98 +127,91 @@ export default function LoxoneConfigScreen() {
           marginBottom: Spacing.md,
           color: colors.label.primary,
         },
-        sensorList: { marginTop: Spacing.md },
-        sensorListTitle: { ...Typography.subheadline, color: colors.label.secondary, marginBottom: Spacing.sm },
-        sensorItem: {
+        // ─── Sensor rows (Phase 2.1) ──────────────────────────────────
+        sensorRow: {
           flexDirection: 'row',
-          justifyContent: 'space-between',
           alignItems: 'center',
-          backgroundColor: colors.background.secondary,
-          borderRadius: Layout.radius.md,
-          borderWidth: Layout.border.normal,
-          borderColor: colors.separator.opaque,
-          padding: Spacing.md,
-          marginBottom: Spacing.sm,
+          paddingVertical: Spacing.sm,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: colors.separator.nonOpaque,
+          backgroundColor: colors.background.groupedSecondary,
         },
-        sensorItemSelected: {
-          borderColor: colors.tint,
-          borderWidth: 2,
-          backgroundColor: `${colors.tint}10`,
+        sensorRowLast: { borderBottomWidth: 0 },
+        sensorDragHandle: {
+          width: 32,
+          height: 44,
+          justifyContent: 'center',
+          alignItems: 'center',
+          marginRight: Spacing.xs,
         },
-        sensorInfo: { flex: 1 },
-        sensorName: { ...Typography.body, color: colors.label.primary, marginBottom: Spacing.xs },
-        sensorDetails: { ...Typography.caption1, color: colors.label.secondary },
-        checkmark: { fontSize: 20, color: colors.tint, marginLeft: Spacing.sm },
+        sensorDragHandleIcon: {
+          fontSize: 18,
+          color: colors.label.tertiary,
+          letterSpacing: -3, // tighten the three dots into stripes
+          fontWeight: '700',
+        },
+        sensorMain: { flex: 1, marginRight: Spacing.sm },
+        sensorName: {
+          ...Typography.body,
+          color: colors.label.primary,
+          fontWeight: '500',
+        },
+        sensorMeta: {
+          ...Typography.caption2,
+          color: colors.label.tertiary,
+          marginTop: 2,
+        },
+        sensorFlags: { flexDirection: 'row', alignItems: 'center', marginRight: Spacing.xs },
+        sensorFlag: {
+          marginLeft: Spacing.sm,
+          alignItems: 'center',
+        },
+        sensorFlagLabel: {
+          ...Typography.caption2,
+          color: colors.label.secondary,
+          marginBottom: 2,
+        },
+        sensorDeleteBtn: {
+          paddingHorizontal: Spacing.sm,
+          paddingVertical: Spacing.xs,
+        },
+        sensorDeleteBtnText: {
+          fontSize: 18,
+          color: colors.accent.red,
+        },
+        emptyState: {
+          paddingVertical: Spacing.lg,
+          alignItems: 'center',
+        },
+        emptyStateText: {
+          ...Typography.subheadline,
+          color: colors.label.secondary,
+          textAlign: 'center',
+          marginBottom: Spacing.md,
+        },
+        addButton: {
+          marginTop: Spacing.md,
+          paddingVertical: Spacing.sm,
+          alignItems: 'center',
+        },
+        addButtonText: {
+          ...Typography.headline,
+          color: colors.tint,
+        },
         actions: { marginTop: Spacing.lg, gap: Spacing.md },
         infoSection: {
           marginTop: Spacing.xl,
           padding: Spacing.md,
-          backgroundColor: colors.background.secondary,
-          borderRadius: Layout.radius.md,
+          backgroundColor: colors.background.groupedSecondary,
+          borderRadius: Layout.radius.lg,
         },
         infoTitle: { ...Typography.subheadline, color: colors.label.primary, marginBottom: Spacing.xs },
         infoText: { ...Typography.caption1, color: colors.label.secondary, lineHeight: 18 },
-        loadingHint: {
-          marginTop: Spacing.md,
-          padding: Spacing.md,
-          backgroundColor: `${colors.tint}15`,
-          borderRadius: Layout.radius.md,
-          borderLeftWidth: 3,
-          borderLeftColor: colors.tint,
-        },
-        loadingHintText: { ...Typography.caption1, color: colors.label.secondary, lineHeight: 18 },
-        sectionHeader: {
-          flexDirection: 'row',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          paddingVertical: Spacing.sm,
-        },
-        sectionSummary: { ...Typography.subheadline, color: colors.tint, fontWeight: '600' },
-        previewRow: { marginTop: Spacing.xs },
-        previewLoading: {
-          ...Typography.caption1,
-          color: colors.label.secondary,
-          fontStyle: 'italic',
-        },
-        previewTemp: { ...Typography.caption1, color: colors.tint, fontWeight: '600' },
-        previewError: {
-          ...Typography.caption1,
-          color: colors.accent.red,
-          fontStyle: 'italic',
-        },
       }),
     [colors],
   );
 
-  const scrollHandler = useAnimatedScrollHandler({
-    onScroll: (e) => {
-      sharedScrollY.value = e.contentOffset.y;
-    },
-  });
-  useFocusEffect(
-    useCallback(() => {
-      return () => {
-        sharedScrollY.value = 0;
-      };
-    }, [sharedScrollY])
-  );
-
-  const [enabled, setEnabled] = useState(false);
-  const [cloudAddress, setCloudAddress] = useState('504F94A1874F'); // Pre-filled
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [selectedSensorUUID, setSelectedSensorUUID] = useState<string | undefined>();
-  const [sensors, setSensors] = useState<LoxoneTemperatureSensor[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [loadingSensors, setLoadingSensors] = useState(false);
-  const [sensorSearchQuery, setSensorSearchQuery] = useState('');
-  const [configSaved, setConfigSaved] = useState(false);
-  const [showSensors, setShowSensors] = useState(true);
-  const [showConnection, setShowConnection] = useState(true);
-  const [previewTemperature, setPreviewTemperature] = useState<number | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-
+  // ─── Load ─────────────────────────────────────────────────────────
   useEffect(() => {
     loadConfig();
   }, []);
@@ -191,40 +223,52 @@ export default function LoxoneConfigScreen() {
       setCloudAddress(config.cloudAddress);
       setUsername(config.username);
       setPassword(config.password);
-      // Phase 1: read the first sensor as the "currently selected" sensor.
-      // Phase 2 will replace this single-sensor UI with the full sensor list.
-      const firstSensor = config.sensors[0];
-      setSelectedSensorUUID(firstSensor?.uuid);
-      if (config.enabled && firstSensor) {
+      setSensors(config.sensors);
+      if (config.enabled && config.sensors.length > 0) {
         setConfigSaved(true);
         setShowConnection(false);
-        setShowSensors(false);
       }
     }
+    setHasLoadedOnce(true);
   };
 
+  // ─── Master toggle: persist enabled + sensors immediately ───────
+  const persistNow = useCallback(
+    async (next: { enabled?: boolean; sensors?: Sensor[]; cloudAddress?: string; username?: string; password?: string }) => {
+      const cfg = await SharedStorage.getLoxoneConfig();
+      if (!cfg) {
+        // No existing config — save a fresh one with current inputs
+        await SharedStorage.setLoxoneConfig({
+          cloudAddress: next.cloudAddress ?? cloudAddress,
+          username: next.username ?? username,
+          password: next.password ?? password,
+          enabled: next.enabled ?? enabled,
+          sensors: next.sensors ?? sensors,
+        });
+      } else {
+        await SharedStorage.setLoxoneConfig({
+          ...cfg,
+          ...next,
+        });
+      }
+    },
+    [cloudAddress, username, password, enabled, sensors],
+  );
+
+  // ─── Connection test (unchanged behavior) ────────────────────────
   const testConnection = async () => {
     if (!username || !password) {
       Alert.alert('Fehler', 'Bitte Username und Passwort eingeben');
       return;
     }
-
     setTesting(true);
     try {
-      const api = new LoxoneAPI({
-        cloudAddress,
-        username,
-        password,
-      });
-
+      const api = new LoxoneAPI({ cloudAddress, username, password });
       const connection = await api.getConnection();
       const connectionType = connection.type === 'local' ? 'Lokal' : 'Cloud';
-
       Alert.alert(
         'Verbindung erfolgreich',
-        `Typ: ${connectionType}\n` +
-          `URL: ${connection.baseURL}\n\n` +
-          'Die Verbindung zum Loxone Miniserver funktioniert!',
+        `Typ: ${connectionType}\nURL: ${connection.baseURL}\n\nDie Verbindung zum Loxone Miniserver funktioniert!`,
       );
     } catch (error: any) {
       Alert.alert('Verbindung fehlgeschlagen', error.message || 'Unbekannter Fehler');
@@ -233,99 +277,62 @@ export default function LoxoneConfigScreen() {
     }
   };
 
-  const selectSensor = async (uuid: string, name: string) => {
-    setSelectedSensorUUID(uuid);
-
-    if (!username || !password) return;
-
-    setPreviewLoading(true);
-    setPreviewTemperature(null);
-
-    try {
-      const api = new LoxoneAPI({
-        cloudAddress,
-        username,
-        password,
-      });
-      const temp = await api.getTemperature(uuid);
-      setPreviewTemperature(temp);
-    } catch (error: any) {
-      setPreviewTemperature(null);
-    } finally {
-      setPreviewLoading(false);
-    }
+  // ─── Sensor row actions (Phase 2.1) ─────────────────────────────
+  const onDragEnd = async ({ data }: { data: Sensor[] }) => {
+    setSensors(data);
+    await SharedStorage.reorderSensors(data.map((s) => s.uuid));
   };
 
-  const loadSensors = async () => {
-    if (!username || !password) {
-      Alert.alert('Fehler', 'Bitte Username und Passwort eingeben');
-      return;
-    }
-
-    setLoadingSensors(true);
-    setSensors([]);
-    setPreviewTemperature(null);
-
-    try {
-      const api = new LoxoneAPI({
-        cloudAddress,
-        username,
-        password,
-      });
-
-      const foundSensors = await api.getTemperatureSensors();
-
-      if (foundSensors.length === 0) {
-        Alert.alert('Keine Sensoren gefunden', 'Im Miniserver wurden keine Temperatursensoren gefunden.');
-        return;
-      }
-
-      setSensors(foundSensors);
-      Alert.alert('Sensoren geladen', `${foundSensors.length} Temperatursensor(en) gefunden.`);
-    } catch (error: any) {
-      Alert.alert('Fehler beim Laden', error.message || 'Konnte Sensoren nicht laden');
-    } finally {
-      setLoadingSensors(false);
-    }
+  const toggleShowInApp = async (uuid: string) => {
+    const sensor = sensors.find((s) => s.uuid === uuid);
+    if (!sensor) return;
+    const next = !sensor.showInApp;
+    setSensors((prev) => prev.map((s) => (s.uuid === uuid ? { ...s, showInApp: next } : s)));
+    await SharedStorage.updateSensor(uuid, { showInApp: next });
   };
 
+  const toggleShowInWidget = async (uuid: string) => {
+    const sensor = sensors.find((s) => s.uuid === uuid);
+    if (!sensor) return;
+    const next = !sensor.showInWidget;
+    setSensors((prev) => prev.map((s) => (s.uuid === uuid ? { ...s, showInWidget: next } : s)));
+    await SharedStorage.updateSensor(uuid, { showInWidget: next });
+  };
+
+  const deleteSensorWithConfirm = async (uuid: string) => {
+    const sensor = sensors.find((s) => s.uuid === uuid);
+    if (!sensor) return;
+    Alert.alert(
+      'Sensor löschen?',
+      `"${sensor.name}" wirklich aus der Konfiguration entfernen?`,
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Löschen',
+          style: 'destructive',
+          onPress: async () => {
+            setSensors((prev) => prev.filter((s) => s.uuid !== uuid));
+            await SharedStorage.removeSensor(uuid);
+          },
+        },
+      ],
+    );
+  };
+
+  // ─── Save (master + sensors) ────────────────────────────────────
   const saveConfig = async () => {
-    if (enabled && !selectedSensorUUID) {
-      Alert.alert('Fehler', 'Bitte einen Temperatursensor auswählen');
-      return;
-    }
-
     setLoading(true);
     try {
-      // Look up the sensor name to persist alongside the UUID
-      const sensor = sensors.find((s) => s.uuid === selectedSensorUUID);
-      const sensorName = sensor?.name ?? selectedSensorUUID;
-
-      // Phase 1: wrap the single selected sensor in the new array shape.
-      // Phase 2 will replace this with the full sensor list UX.
       await SharedStorage.setLoxoneConfig({
         cloudAddress,
         username,
         password,
         enabled,
-        sensors: [
-          {
-            uuid: selectedSensorUUID,
-            name: sensorName,
-            showInApp: true,
-            showInWidget: true,
-            order: 0,
-          },
-        ],
+        sensors,
       });
-
-      // Trigger a weather refresh so the widget picks up the new sensor
       await refreshWeather();
-
       setConfigSaved(true);
       setShowConnection(false);
-      setShowSensors(false);
-
       Alert.alert('Gespeichert', 'Loxone Konfiguration wurde gespeichert.');
     } catch (error: any) {
       Alert.alert('Fehler', 'Konnte Konfiguration nicht speichern');
@@ -334,10 +341,10 @@ export default function LoxoneConfigScreen() {
     }
   };
 
-  const deleteConfig = async () => {
+  const deleteConfig = () => {
     Alert.alert(
       'Konfiguration löschen?',
-      'Möchtest du die Loxone Konfiguration wirklich löschen?',
+      'Möchtest du die Loxone Konfiguration wirklich komplett löschen?',
       [
         { text: 'Abbrechen', style: 'cancel' },
         {
@@ -349,12 +356,9 @@ export default function LoxoneConfigScreen() {
             setEnabled(false);
             setUsername('');
             setPassword('');
-            setSelectedSensorUUID(undefined);
             setSensors([]);
             setConfigSaved(false);
             setShowConnection(true);
-            setShowSensors(true);
-            setPreviewTemperature(null);
             Alert.alert('Gelöscht', 'Loxone Konfiguration wurde gelöscht.');
           },
         },
@@ -364,55 +368,40 @@ export default function LoxoneConfigScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
-      <View style={[styles.closeRow, { paddingTop: insets.top + Spacing.sm }]}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          accessibilityRole="button"
-          accessibilityLabel="Schliessen"
-          testID="modal-close-button"
-          style={styles.closeButton}
-        >
-          <Text style={styles.closeIcon}>✕</Text>
-        </TouchableOpacity>
+      <View style={styles.headerRow}>
+        <View style={styles.headerSpacer} />
+        <Text style={styles.headerTitle}>Loxone</Text>
+        <LiquidGlassCloseButton onPress={() => navigation.goBack()} label="Fertig" />
       </View>
-      <Animated.ScrollView
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
-        onScroll={scrollHandler}
-        scrollEventThrottle={16}
+        keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>Smart Home Konfiguration</Text>
-          <Text style={styles.subtitle}>
-            Loxone-Sensor ins Widget integrieren
-          </Text>
-        </View>
+        <Text style={styles.title}>Smart Home Konfiguration</Text>
+        <Text style={styles.subtitle}>
+          Wetterprognose und aktuelle Messwerte für den gewählten Standort.
+        </Text>
 
-        {/* Enable/Disable Toggle */}
+        {/* Master enable toggle */}
         <View style={styles.section}>
           <View style={styles.toggleRow}>
             <View style={styles.toggleLabel}>
               <Text style={styles.label}>Loxone aktivieren</Text>
-              <Text style={styles.hint}>Zeigt Loxone Temperatur im Widget</Text>
+              <Text style={styles.hint}>Sensoren in App und Widget anzeigen</Text>
             </View>
             <Switch
               value={enabled}
-              onValueChange={(value) => {
+              onValueChange={async (value) => {
                 setEnabled(value);
-                // Persist toggle immediately (works on existing configs).
-                (async () => {
-                  try {
-                    const existing = await SharedStorage.getLoxoneConfig();
-                    if (!existing) return;
-                    await SharedStorage.setLoxoneConfig({ ...existing, enabled: value });
-                    if (!value) {
-                      refreshWeather();
-                    }
-                  } catch (error) {
-                    console.warn('[LoxoneConfig] Toggle persist failed:', error);
-                  }
-                })();
+                try {
+                  const existing = await SharedStorage.getLoxoneConfig();
+                  if (!existing) return;
+                  await SharedStorage.setLoxoneConfig({ ...existing, enabled: value });
+                  if (!value) refreshWeather();
+                } catch (error) {
+                  console.warn('[LoxoneConfig] Toggle persist failed:', error);
+                }
               }}
               trackColor={{ false: colors.separator.opaque, true: colors.tint }}
               thumbColor={colors.background.primary}
@@ -420,7 +409,7 @@ export default function LoxoneConfigScreen() {
           </View>
         </View>
 
-        {/* Configuration Section */}
+        {/* Connection section (collapsible) */}
         <View style={styles.section}>
           <TouchableOpacity
             style={styles.sectionHeader}
@@ -430,7 +419,9 @@ export default function LoxoneConfigScreen() {
               {showConnection ? '▼' : '▶'} Verbindung
             </Text>
             {configSaved && !showConnection && (
-              <Text style={styles.sectionSummary}>✓ {cloudAddress}</Text>
+              <Text style={[Typography.subheadline, { color: colors.tint, fontWeight: '600' }]}>
+                ✓ {cloudAddress}
+              </Text>
             )}
           </TouchableOpacity>
 
@@ -482,155 +473,123 @@ export default function LoxoneConfigScreen() {
           )}
         </View>
 
-        {/* Sensor Selection */}
+        {/* Sensor list (Phase 2.1) */}
         <View style={styles.section}>
-          <TouchableOpacity
-            style={styles.sectionHeader}
-            onPress={() => setShowSensors(!showSensors)}
-          >
-            <Text style={styles.sectionTitle}>
-              {showSensors ? '▼' : '▶'} Temperatursensor
-            </Text>
-            {configSaved && !showSensors && (
-              <Text style={styles.sectionSummary}>✓ Ausgewählt</Text>
-            )}
-          </TouchableOpacity>
+          <Text style={styles.sectionTitle}>Temperatursensoren</Text>
 
-          {showSensors && (
-            <View>
-              {!configSaved && (
-                <>
-                  <Button
-                    title="Sensoren laden"
-                    onPress={loadSensors}
-                    disabled={!username || !password || loadingSensors}
-                    loading={loadingSensors}
-                  />
+          {sensors.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>
+                Noch keine Sensoren konfiguriert. Verbindung herstellen und Sensor hinzufügen.
+              </Text>
+            </View>
+          ) : (
+            <DraggableFlatList
+              data={sensors}
+              keyExtractor={(item) => item.uuid}
+              onDragEnd={onDragEnd}
+              scrollEnabled={false}
+              renderItem={({ item, drag, isActive }: RenderItemParams<Sensor>) => (
+                <ScaleDecorator>
+                  <TouchableOpacity
+                    onLongPress={drag}
+                    delayLongPress={150}
+                    disabled={isActive}
+                    style={[styles.sensorRow, isActive && { opacity: 0.85 }]}
+                  >
+                    {/* Drag handle — three-stripe icon (☰) on the left */}
+                    <View style={styles.sensorDragHandle} pointerEvents="none">
+                      <Text style={styles.sensorDragHandleIcon}>≡</Text>
+                    </View>
 
-                  {loadingSensors && (
-                    <View style={styles.loadingHint}>
-                      <Text style={styles.loadingHintText}>
-                        Structure File wird geladen...{'\n'}
-                        Bei großen Loxone-Projekten kann dies bis zu 90 Sekunden dauern.
+                    {/* Name + meta */}
+                    <View style={styles.sensorMain}>
+                      <Text style={styles.sensorName} numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                      <Text style={styles.sensorMeta} numberOfLines={1}>
+                        {item.uuid.slice(0, 8)}…
                       </Text>
                     </View>
-                  )}
-                </>
+
+                    {/* Flags: in-app + in-widget */}
+                    <View style={styles.sensorFlags}>
+                      <View style={styles.sensorFlag}>
+                        <Text style={styles.sensorFlagLabel}>App</Text>
+                        <Switch
+                          value={item.showInApp}
+                          onValueChange={() => toggleShowInApp(item.uuid)}
+                          trackColor={{ false: colors.separator.opaque, true: colors.tint }}
+                          thumbColor={colors.background.primary}
+                        />
+                      </View>
+                      <View style={styles.sensorFlag}>
+                        <Text style={styles.sensorFlagLabel}>Widget</Text>
+                        <Switch
+                          value={item.showInWidget}
+                          onValueChange={() => toggleShowInWidget(item.uuid)}
+                          trackColor={{ false: colors.separator.opaque, true: colors.tint }}
+                          thumbColor={colors.background.primary}
+                        />
+                      </View>
+                    </View>
+
+                    {/* Delete */}
+                    <TouchableOpacity
+                      onPress={() => deleteSensorWithConfirm(item.uuid)}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      accessibilityLabel={`${item.name} löschen`}
+                      accessibilityRole="button"
+                      style={styles.sensorDeleteBtn}
+                    >
+                      <Text style={styles.sensorDeleteBtnText}>✕</Text>
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                </ScaleDecorator>
               )}
-
-              {sensors.length > 0 ? (
-                <View style={styles.sensorList}>
-                  <Text style={styles.sensorListTitle}>
-                    {sensors.length} Sensor(en) gefunden
-                  </Text>
-
-                  {!configSaved && (
-                    <TextInput
-                      style={styles.input}
-                      value={sensorSearchQuery}
-                      onChangeText={setSensorSearchQuery}
-                      placeholder="🔍 Sensor suchen (Name, Raum, Typ)..."
-                      placeholderTextColor={colors.label.tertiary}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                    />
-                  )}
-
-                  {sensors
-                    .filter((sensor) => {
-                      if (configSaved) {
-                        return sensor.uuid === selectedSensorUUID;
-                      }
-                      if (!sensorSearchQuery.trim()) return true;
-                      const query = sensorSearchQuery.toLowerCase();
-                      return (
-                        sensor.name.toLowerCase().includes(query) ||
-                        sensor.room.toLowerCase().includes(query) ||
-                        sensor.type.toLowerCase().includes(query) ||
-                        sensor.category.toLowerCase().includes(query)
-                      );
-                    })
-                    .map((sensor) => (
-                      <TouchableOpacity
-                        key={sensor.uuid}
-                        style={[
-                          styles.sensorItem,
-                          selectedSensorUUID === sensor.uuid && styles.sensorItemSelected,
-                        ]}
-                        onPress={() => !configSaved && selectSensor(sensor.uuid, sensor.name)}
-                        disabled={configSaved}
-                      >
-                        <View style={styles.sensorInfo}>
-                          <Text style={styles.sensorName}>{sensor.name}</Text>
-                          <Text style={styles.sensorDetails}>
-                            {sensor.room} • {sensor.type}
-                          </Text>
-                          {selectedSensorUUID === sensor.uuid && !configSaved && (
-                            <View style={styles.previewRow}>
-                              {previewLoading ? (
-                                <Text style={styles.previewLoading}>🌡️ Lade...</Text>
-                              ) : previewTemperature !== null ? (
-                                <Text style={styles.previewTemp}>
-                                  🌡️ Aktuell: {previewTemperature.toFixed(1)}°C
-                                </Text>
-                              ) : (
-                                <Text style={styles.previewError}>
-                                  ⚠️ Konnte nicht abgerufen werden
-                                </Text>
-                              )}
-                            </View>
-                          )}
-                        </View>
-                        {selectedSensorUUID === sensor.uuid && (
-                          <Text style={styles.checkmark}>✓</Text>
-                        )}
-                      </TouchableOpacity>
-                    ))}
-                </View>
-              ) : null}
-            </View>
-          )}
-        </View>
-
-        {/* Save/Delete Actions */}
-        <View style={styles.actions}>
-          {!configSaved && (
-            <Button
-              title="Speichern"
-              onPress={saveConfig}
-              disabled={loading}
-              loading={loading}
-              fullWidth
             />
           )}
 
+          {/* Add sensor (Phase 2.2: opens picker) */}
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() =>
+              Alert.alert(
+                'Sensor hinzufügen',
+                'Picker kommt in Phase 2.2 — bis dahin Sensor manuell via Storage konfigurieren.',
+              )
+            }
+            accessibilityRole="button"
+          >
+            <Text style={styles.addButtonText}>+ Sensor hinzufügen</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Save / Delete actions */}
+        <View style={styles.actions}>
+          <Button
+            title="Konfiguration speichern"
+            onPress={saveConfig}
+            disabled={loading}
+            loading={loading}
+            fullWidth
+          />
           {configSaved && (
-            <>
-              <Button
-                title="Konfiguration bearbeiten"
-                onPress={() => {
-                  setConfigSaved(false);
-                  setShowConnection(true);
-                  setShowSensors(true);
-                }}
-                fullWidth
-              />
-              <Button title="Konfiguration löschen" onPress={deleteConfig} fullWidth />
-            </>
+            <Button title="Konfiguration löschen" onPress={deleteConfig} fullWidth variant="secondary" />
           )}
         </View>
 
-        {!configSaved && (
+        {hasLoadedOnce && !configSaved && (
           <View style={styles.infoSection}>
             <Text style={styles.infoTitle}>Hinweise:</Text>
             <Text style={styles.infoText}>
-              • Die App verbindet sich automatisch lokal (WLAN) oder über die Cloud{'\n'}
-              • Credentials werden sicher auf dem Gerät gespeichert{'\n'}
-              • Die Temperatur wird alle 5-15 Minuten aktualisiert
+              • Verbindung testen, dann Sensoren aus dem Miniserver hinzufügen{'\n'}
+              • App-Schalter: zeigt den Sensor in der Smart-Home-Tab{'\n'}
+              • Widget-Schalter: zeigt den Sensor im iOS-Widget
             </Text>
           </View>
         )}
-      </Animated.ScrollView>
+      </ScrollView>
     </SafeAreaView>
   );
 }

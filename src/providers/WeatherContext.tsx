@@ -180,14 +180,17 @@ export function WeatherProvider({ children }: WeatherProviderProps) {
       isNull: loxoneConfig === null,
       keys: loxoneConfig ? Object.keys(loxoneConfig) : null,
       enabled: loxoneConfig?.enabled,
-      hasSensorUUID: !!loxoneConfig?.temperatureSensorUUID,
+      // Phase 1: read first showInApp sensor as the primary sensor.
+      // Phase 3 will replace this with a multi-sensor fetch.
+      hasSensorUUID: !!loxoneConfig?.sensors.find((s) => s.showInApp),
       username: loxoneConfig?.username,
       cloudAddress: loxoneConfig?.cloudAddress,
     });
-    if (loxoneConfig?.enabled && loxoneConfig.temperatureSensorUUID) {
+    const primarySensorUuid = loxoneConfig?.sensors.find((s) => s.showInApp)?.uuid;
+    if (loxoneConfig?.enabled && primarySensorUuid) {
       try {
         const api = new LoxoneAPI(loxoneConfig);
-        const temp = await api.getTemperature(loxoneConfig.temperatureSensorUUID);
+        const temp = await api.getTemperature(primarySensorUuid);
         loxoneTemp = temp;
         loxoneTimestamp = new Date().toISOString();
         await SharedStorage.setLoxoneSensorData({
