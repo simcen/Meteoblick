@@ -14,18 +14,14 @@ values: `open` / `exploring` / `in-progress` / `done` / `reverted`.
 - Decision needed before implementation.
 
 ### Multi-Sensor Smart Home Support
-- Status: scoped (`docs/SCOPE_MULTI_SENSOR.md`); Phase 1 + 2.1 done (storage,
-  migration, granular ops, multi-sensor UI with drag handle, flags, delete).
-  Phase 2.2 (add picker) next.
-- MVP scope: array of `{ uuid, name, showInApp, showInWidget, order }` sensors.
-  Widget layout per family (small=1, medium=2, large=up to 6) selected top-N by
-  `order` from `showInWidget` sensors. Widget timeline fetches its own sensors
-  via flexible `getTemperatures(uuids[])` endpoint.
+- Status: **shipped** (Phases 1-4 + polish). Storage + migration + granular ops
+  + multi-sensor UI (drag handle, flags, rename, delete, picker). SmartHomeScreen
+  shows multi-sensor list. Widget renders 1/2/6 sensors per family via a
+  single consolidated `/api/widget/timeline` call (Loxone fetched server-side).
 - Polish backlog (post-MVP):
   - **Swipe-to-delete** instead of ✕ icon — more iOS-native for row removal
   - **Connection section → stack card (non-collapsible)**, "Konfiguration speichern" button only persists connection fields (sensors already auto-save via granular ops)
   - **SmartHomeScreen**: last sensor row in list shouldn't have a horizontal divider (matches menuGroup's rowLast treatment)
-  - Inline rename UX (long-press → modal with TextInput) — Phase 2.3
   - Sensor types beyond temperature (humidity, brightness, ...) — D1 deferred
 
 ### Drawer → Stack (experimental)
@@ -66,7 +62,9 @@ For archaeology. Each row links the commit hash so future readers can dig in.
 
 | Date | Commit | Item |
 |---|---|---|
-| 2026-07-13 | (main HEAD) | TestFlight upload via iTMSTransporter + API key auth |
+| 2026-07-13 | `67664d5` | Widget: single consolidated /api/widget/timeline call (multi-sensor) |
+| 2026-07-13 | `8cc823e` | Backend tests: multi-sensor widget timeline helpers |
+| 2026-07-13 | (earlier) | TestFlight upload via iTMSTransporter + API key auth |
 | 2026-07-13 | `b589a87` | Grouped bg on Home / SmartHome / Drawer |
 | 2026-07-13 | `4007d09` | iOS 26 Liquid Glass tab bar |
 | 2026-07-13 | `cc83527` | Right-handed chrome + Liquid Glass close button |
