@@ -239,22 +239,23 @@ const styles = StyleSheet.create({
   },
   hamburgerSlot: {
     position: 'absolute',
-    left: 0,
+    // Right-handed reachability — hamburger anchors to the right edge.
+    right: 0,
     justifyContent: 'center',
     alignItems: 'center',
     width: 44 + Spacing.md,
-    paddingLeft: Spacing.md,
+    paddingRight: Spacing.md,
   },
   // White circle positioned to be centered on the 32x32 button.
-  // Slot content area center: x = Spacing.md (16) + (44-32)/2 + 16 = 38,
-  // y = VISUAL_HEIGHT/2 = 28. Circle (40x40) → left=18, top=8.
+  // Slot content area center (right-aligned): x = 60 - 38 = 22 from slot.x,
+  // y = VISUAL_HEIGHT/2 = 28. Circle (40x40) → right=18, top=8.
   // backgroundColor is applied inline (theme-aware); shadow stays dark in both modes.
   hamburgerBg: {
     position: 'absolute',
     width: 40,
     height: 40,
     borderRadius: 20,
-    left: 18,
+    right: 18,
     top: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },

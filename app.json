@@ -13,7 +13,7 @@
     "ios": {
       "bundleIdentifier": "ch.meteoblick",
       "buildNumber": "6",
-      "deploymentTarget": "18.0",
+      "deploymentTarget": "26.0",
       "supportsTablet": true,
       "entitlements": {
         "com.apple.security.application-groups": [

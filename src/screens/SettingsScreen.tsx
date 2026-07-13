@@ -6,6 +6,15 @@
  * 2. Navigation items: Orte (POI search) and Smart Home (Loxone config)
  *    Each opens a dedicated sub-screen in the Settings stack.
  * 3. App Info (read-only): name, version, build, SDK
+ *
+ * Header layout (iOS 26 navigation-bar style):
+ *   [Status bar / safe area]
+ *   ┌─────────────────────────────────────────┐
+ *   │              Einstellungen  [Schliessen] │  ← title centered, close right,
+ *   └─────────────────────────────────────────┘    vertically aligned, tight
+ *                                                    against the card below
+ *   ┌─ ALLGEMEIN ──────────────────────────┐
+ *   │ ...                                  │
  */
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { StyleSheet, View, Text, ScrollView, Pressable } from 'react-native';
@@ -15,7 +24,8 @@ import { SharedStorage } from '../storage/SharedStorage';
 import { useColors } from '../hooks/useColors';
 import { useTheme } from '../contexts/ThemeContext';
 import type { ThemePreference } from '../storage/SharedStorage';
-import { Spacing, Typography, Shadows } from '../constants/designSystem';
+import { Spacing, Typography, Shadows, Layout } from '../constants/designSystem';
+import { LiquidGlassCloseButton } from '../components/LiquidGlassCloseButton';
 import { BUILD_NUMBER } from '../constants';
 
 // Expo SDK version — manual constant, Expo SDK is at 57
@@ -72,22 +82,36 @@ export default function SettingsScreen() {
   const styles = useMemo(
     () =>
       StyleSheet.create({
-        safeArea: { flex: 1, backgroundColor: colors.background.primary },
-        closeRow: {
+        safeArea: { flex: 1, backgroundColor: colors.background.grouped },
+        // Navigation-bar-style header. lineHeight: 36 on the title matches
+        // the LiquidGlassCloseButton's 36pt box height so both glyphs sit on
+        // the same horizontal line. Spacer matches the new button width.
+        headerRow: {
           flexDirection: 'row',
-          paddingHorizontal: Spacing.sm,
-          paddingBottom: Spacing.sm,
+          alignItems: 'center',
+          paddingTop: insets.top + Spacing.sm,
+          // paddingBottom: 0 — title row sits flush against the first card.
+          paddingBottom: 0,
+          paddingHorizontal: Spacing.md,
         },
-        closeButton: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
-        closeIcon: { fontSize: 18, color: colors.label.primary, lineHeight: 20 },
+        headerSpacer: { width: 76 }, // matches LiquidGlassCloseButton minWidth (76pt)
+        headerTitle: {
+          flex: 1,
+          textAlign: 'center',
+          ...Typography.title2,
+          lineHeight: 36, // match button box height for vertical alignment
+          color: colors.label.primary,
+        },
         content: {
           paddingHorizontal: Spacing.screenHorizontal,
+          // paddingTop matches Debug screen's inline spacing between headerRow
+          // and the first card content.
+          paddingTop: Spacing.md,
           paddingBottom: Spacing.lg,
         },
-        title: { ...Typography.title2, color: colors.label.primary, marginBottom: Spacing.lg },
         section: {
-          backgroundColor: colors.background.secondary,
-          borderRadius: 12,
+          backgroundColor: colors.background.groupedSecondary,
+          borderRadius: Layout.radius.lg,
           paddingHorizontal: Spacing.md,
           paddingVertical: Spacing.sm,
           marginBottom: Spacing.lg,
@@ -100,8 +124,8 @@ export default function SettingsScreen() {
           letterSpacing: 0.5,
         },
         menuGroup: {
-          backgroundColor: colors.background.secondary,
-          borderRadius: 12,
+          backgroundColor: colors.background.groupedSecondary,
+          borderRadius: Layout.radius.lg,
           marginBottom: Spacing.lg,
           overflow: 'hidden',
         },
@@ -150,7 +174,7 @@ export default function SettingsScreen() {
           marginLeft: Spacing.md,
         },
       }),
-    [colors],
+    [colors, insets.top],
   );
 
   const locationSubtitle = locationName ?? 'Nicht konfiguriert';
@@ -163,22 +187,12 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
-      {/* Close button — left-aligned, sits below the status bar. */}
-      <View style={[styles.closeRow, { paddingTop: insets.top + Spacing.sm }]}>
-        <Pressable
-          onPress={() => navigation.goBack()}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          accessibilityRole="button"
-          accessibilityLabel="Schliessen"
-          testID="modal-close-button"
-          style={styles.closeButton}
-        >
-          <Text style={styles.closeIcon}>✕</Text>
-        </Pressable>
+      <View style={styles.headerRow}>
+        <View style={styles.headerSpacer} />
+        <Text style={styles.headerTitle}>Einstellungen</Text>
+        <LiquidGlassCloseButton onPress={() => navigation.goBack()} />
       </View>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Einstellungen</Text>
-
         {/* Allgemein (theme + future general settings) */}
         <View style={styles.menuGroup}>
           <Text style={[styles.sectionHeader, { paddingHorizontal: Spacing.md, marginTop: Spacing.sm }]}>
@@ -224,6 +238,11 @@ export default function SettingsScreen() {
   );
 }
 
+/**
+ * LiquidGlassCloseButton — extracted to src/components/. The inline copy
+ * previously here was promoted so Debug (and future modals) can reuse it.
+ */
+
 function MenuItem({
   icon,
   title,
@@ -268,6 +287,53 @@ function Row({ label, value }: { label: string; value: string }) {
         {value}
       </Text>
     </View>
+  );
+}
+
+/**
+ * useSettingsScreenStyles — shared theme-aware style bundle for MenuItem
+ * and Row. Both sub-components render in the parent's tree so they inherit
+ * the ThemeProvider; calling this hook at the top of each render keeps
+ * hook order consistent.
+ */
+function useSettingsScreenStyles() {
+  const colors = useColors();
+  return useMemo(
+    () =>
+      StyleSheet.create({
+        menuItem: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingHorizontal: Spacing.md,
+          paddingVertical: Spacing.md,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: colors.separator.nonOpaque,
+        },
+        menuItemLast: { borderBottomWidth: 0 },
+        menuItemPressed: { backgroundColor: colors.fill.tertiary },
+        menuIcon: { fontSize: 22, marginRight: Spacing.md },
+        menuText: { flex: 1 },
+        menuTitle: { ...Typography.body, color: colors.label.primary, fontWeight: '500' },
+        menuSubtitle: { ...Typography.caption1, color: colors.label.secondary, marginTop: 2 },
+        menuChevron: { fontSize: 24, color: colors.label.tertiary, marginLeft: Spacing.sm },
+        row: {
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          paddingVertical: Spacing.sm,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: colors.separator.nonOpaque,
+        },
+        rowLabel: { ...Typography.body, color: colors.label.primary },
+        rowValue: {
+          ...Typography.body,
+          color: colors.label.secondary,
+          flex: 1,
+          textAlign: 'right',
+          marginLeft: Spacing.md,
+        },
+      }),
+    [colors],
   );
 }
 
@@ -332,59 +398,10 @@ function SegmentedControl<T extends string>({
   );
 }
 
-/**
- * useSettingsScreenStyles — shared theme-aware style bundle for MenuItem
- * and Row. Both sub-components render in the parent's tree so they inherit
- * the ThemeProvider; calling this hook at the top of each render keeps
- * hook order consistent (the previous wrapper function used
- * `useMemo(() => …, [])`, which skipped hook execution on re-renders and
- * tripped React's "Rendered fewer hooks" check).
- */
-function useSettingsScreenStyles() {
-  const colors = useColors();
-  return useMemo(
-    () =>
-      StyleSheet.create({
-        menuItem: {
-          flexDirection: 'row',
-          alignItems: 'center',
-          paddingHorizontal: Spacing.md,
-          paddingVertical: Spacing.md,
-          borderBottomWidth: StyleSheet.hairlineWidth,
-          borderBottomColor: colors.separator.nonOpaque,
-        },
-        menuItemLast: { borderBottomWidth: 0 },
-        menuItemPressed: { backgroundColor: colors.fill.tertiary },
-        menuIcon: { fontSize: 22, marginRight: Spacing.md },
-        menuText: { flex: 1 },
-        menuTitle: { ...Typography.body, color: colors.label.primary, fontWeight: '500' },
-        menuSubtitle: { ...Typography.caption1, color: colors.label.secondary, marginTop: 2 },
-        menuChevron: { fontSize: 24, color: colors.label.tertiary, marginLeft: Spacing.sm },
-        row: {
-          flexDirection: 'row',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          paddingVertical: Spacing.sm,
-          borderTopWidth: StyleSheet.hairlineWidth,
-          borderTopColor: colors.separator.nonOpaque,
-        },
-        rowLabel: { ...Typography.body, color: colors.label.primary },
-        rowValue: {
-          ...Typography.body,
-          color: colors.label.secondary,
-          flex: 1,
-          textAlign: 'right',
-          marginLeft: Spacing.md,
-        },
-      }),
-    [colors],
-  );
-}
-
 const segStyles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    borderRadius: 9,
+    borderRadius: Layout.radius.lg, // 16pt — matches menuGroup
     padding: 2,
   },
   segment: {
@@ -392,7 +409,7 @@ const segStyles = StyleSheet.create({
     paddingVertical: 7,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 7,
+    borderRadius: 9,
   },
   segmentActive: {},
   segmentLabel: {

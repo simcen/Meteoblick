@@ -8,7 +8,9 @@ import { MeteoSwissAPI } from '../api/meteoswiss';
 import { LoxoneAPI } from '../api/loxone';
 import { updateWidget } from '../widgets/widgetManager';
 import { Button } from '../components/Button';
+import { LiquidGlassCloseButton } from '../components/LiquidGlassCloseButton';
 import { BUILD_NUMBER, API_BASE_URL } from '../constants';
+import { Spacing, Typography, Layout } from '../constants/designSystem';
 import { useScrollContext } from '../contexts/ScrollContext';
 import { useColors } from '../hooks/useColors';
 import * as BackgroundFetch from 'expo-background-fetch';
@@ -22,16 +24,31 @@ export default function DebugScreen() {
   const styles = useMemo(
     () =>
       StyleSheet.create({
-        safeArea: { flex: 1, backgroundColor: colors.background.primary },
-        closeRow: { flexDirection: 'row', paddingHorizontal: 8, paddingBottom: 8 },
-        closeButton: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
-        closeIcon: { fontSize: 18, color: colors.label.primary, lineHeight: 20 },
+        safeArea: { flex: 1, backgroundColor: colors.background.grouped },
+        // Mirror Settings header: spacer + centered title + close button.
+        // lineHeight: 36 on title matches LiquidGlassCloseButton box height.
+        headerRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingTop: insets.top + Spacing.sm,
+          paddingBottom: 0,
+          paddingHorizontal: Spacing.md,
+        },
+        headerSpacer: { width: 76 }, // matches LiquidGlassCloseButton minWidth
+        headerTitle: {
+          flex: 1,
+          textAlign: 'center',
+          fontSize: Typography.title2.fontSize,
+          fontWeight: Typography.title2.fontWeight,
+          lineHeight: 36,
+          color: colors.label.primary,
+        },
         scrollView: { flex: 1 },
         container: { flex: 1, padding: 20 },
         debugContainer: {
-          backgroundColor: colors.background.secondary,
+          backgroundColor: colors.background.groupedSecondary,
           padding: 16,
-          borderRadius: 8,
+          borderRadius: Layout.radius.lg,
           marginBottom: 16,
         },
         debugTitle: {
@@ -61,7 +78,7 @@ export default function DebugScreen() {
         labelWithIcon: { flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 },
         infoIcon: { fontSize: 14, opacity: 0.6 },
       }),
-    [colors],
+    [colors, insets.top],
   );
   const { sharedScrollY } = useScrollContext();
   const scrollHandler = useAnimatedScrollHandler({
@@ -259,17 +276,10 @@ export default function DebugScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
-      <View style={[styles.closeRow, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          accessibilityRole="button"
-          accessibilityLabel="Schliessen"
-          testID="modal-close-button"
-          style={styles.closeButton}
-        >
-          <Text style={styles.closeIcon}>✕</Text>
-        </TouchableOpacity>
+      <View style={styles.headerRow}>
+        <View style={styles.headerSpacer} />
+        <Text style={styles.headerTitle}>Debug</Text>
+        <LiquidGlassCloseButton onPress={() => navigation.goBack()} />
       </View>
       <Animated.ScrollView
         style={styles.scrollView}

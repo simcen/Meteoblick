@@ -21,6 +21,7 @@ export const lightColors = {
     secondary: '#F2F2F7',         // secondarySystemBackground
     tertiary: '#FFFFFF',          // tertiarySystemBackground
     grouped: '#F2F2F7',           // systemGroupedBackground
+    groupedSecondary: '#FFFFFF', // secondarySystemGroupedBackground — used for cards on gray surfaces
   },
 
   // Label Colors (Text)
@@ -62,12 +63,27 @@ export const lightColors = {
   },
 } as const;
 
+// Palette is derived from lightColors (the source of truth) but with
+// literal types widened to plain `string` and readonly modifiers stripped,
+// so darkColors can be assigned values with different hex strings.
+// Without this mapped type, TypeScript narrows `lightColors.background.primary`
+// to the literal `"#FFFFFF"` (from `as const`) and rejects `"#000000"`.
+type WidenLiteral<T> = T extends string
+  ? string
+  : T extends ReadonlyArray<infer U>
+    ? Array<WidenLiteral<U>>
+    : T extends object
+      ? { -readonly [K in keyof T]: WidenLiteral<T[K]> }
+      : T;
+export type Palette = WidenLiteral<typeof lightColors>;
+
 export const darkColors: Palette = {
   background: {
     primary: '#000000',           // systemBackground
     secondary: '#1C1C1E',         // secondarySystemBackground
     tertiary: '#2C2C2E',          // tertiarySystemBackground
     grouped: '#000000',           // systemGroupedBackground
+    groupedSecondary: '#1C1C1E', // secondarySystemGroupedBackground — cards on dark gray
   },
   label: {
     primary: '#FFFFFF',           // label
@@ -97,7 +113,7 @@ export const darkColors: Palette = {
   },
 };
 
-export type Palette = typeof lightColors;
+// (Palette type is defined above, near lightColors)
 
 // Back-compat shim — kept so call sites that still reference `Colors.*`
 // resolve to the light palette. Removed after all consumers migrate to
@@ -222,7 +238,18 @@ export const Spacing = {
 // ============================================================================
 
 export const Layout = {
-  // Border Radius
+  // Border Radius — Apple HIG / iOS 26 standards.
+  //
+  // Hierarchy (smaller elements use smaller radii for visual hierarchy):
+  //   sm   =  8pt  small controls (inputs, badges, search field)
+  //   md   = 12pt  medium cards (menuGroup, list rows, segmented active)
+  //   lg   = 16pt  large pills & Liquid Glass buttons (modal close button,
+  //                segmented control container, prominent CTA)
+  //   xl   = 20pt  hero / onboarding surfaces
+  //   round = 999pt capsule / circle
+  //
+  // Note: iOS 26 uses "continuous" squircles. RN cannot render those natively,
+  // so we approximate with plain `borderRadius` of the same value.
   radius: {
     sm: 8,
     md: 12,

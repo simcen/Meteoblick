@@ -124,15 +124,16 @@ function Shell({ colors }: { colors: Palette }) {
   return (
     <Drawer.Navigator
       screenOptions={{
+        // Right-handed reachability — drawer slides from the right edge.
+        drawerPosition: 'right',
         headerShown: false,
         drawerStyle: {
           width: '75%',
           backgroundColor: colors.background.primary,
-          // The default drawer casts a soft white drop-shadow on its right
-          // edge. On real iPhone ProMotion displays this reads as a thin
-          // white line during the open/close animation in dark mode.
-          // Removing the shadow eliminates the flicker while keeping the
-          // drawer background opaque.
+          // The default drawer casts a soft white drop-shadow on its edge.
+          // On real iPhone ProMotion displays this reads as a thin white line
+          // during the open/close animation in dark mode. Removing the shadow
+          // eliminates the flicker while keeping the drawer background opaque.
           shadowColor: 'transparent',
         },
       }}
