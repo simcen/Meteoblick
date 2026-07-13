@@ -31,15 +31,21 @@ TaskManager.defineTask(WEATHER_BACKGROUND_TASK, async () => {
   }
 
   // 2. Loxone (if configured) — independent of MeteoSwiss.
+  // Phase 1: still mirrors the FIRST showInApp sensor as the legacy
+  // single value (for the widget's current single-sensor mirror + cache).
+  // Phase 3 will replace this with a multi-sensor cache + multi-value
+  // widget payload.
   let loxoneTemp: number | undefined;
   let loxoneTimestamp: string | undefined;
   let loxoneFresh = false;
 
   const loxoneConfig = await SharedStorage.getLoxoneConfig();
-  if (loxoneConfig?.enabled && loxoneConfig.temperatureSensorUUID) {
+  const primarySensorUuid =
+    loxoneConfig?.sensors.find((s) => s.showInApp)?.uuid ?? loxoneConfig?.sensors[0]?.uuid;
+  if (loxoneConfig?.enabled && primarySensorUuid) {
     try {
       const api = new LoxoneAPI(loxoneConfig);
-      const temp = await api.getTemperature(loxoneConfig.temperatureSensorUUID);
+      const temp = await api.getTemperature(primarySensorUuid);
       loxoneTemp = temp;
       loxoneTimestamp = new Date().toISOString();
       await SharedStorage.setLoxoneSensorData({

@@ -9,6 +9,58 @@ export type ThemePreference = 'system' | 'light' | 'dark';
 const VALID_THEME_PREFERENCES: ThemePreference[] = ['system', 'light', 'dark'];
 
 const POI_CACHE_KEY = 'meteoblick_poi_cache';
+
+// ─── Loxone multi-sensor types & migration helper ───────────────────
+//
+// Storage schema (multi-sensor):
+//   { cloudAddress, username, password, sensors: Sensor[], enabled }
+//
+// Each Sensor:
+//   { uuid, name, showInApp, showInWidget, order }
+//
+// Migration: legacy single-sensor configs (with `temperatureSensorUUID` /
+// `temperatureSensorName` at the top level) are auto-converted on read.
+// The migration is one-shot and idempotent — once persisted in the new
+// shape, the read path skips the legacy branch.
+
+type Sensor = {
+  uuid: string;
+  name: string;
+  showInApp: boolean;
+  showInWidget: boolean;
+  order: number;
+};
+
+export type LoxoneConfig = {
+  cloudAddress: string;
+  username: string;
+  password: string;
+  sensors: Sensor[];
+  enabled: boolean;
+};
+
+// Legacy shape (kept only for migration detection).
+type LegacyLoxoneConfig = {
+  cloudAddress: string;
+  username: string;
+  password: string;
+  temperatureSensorUUID?: string;
+  temperatureSensorName?: string;
+  enabled: boolean;
+};
+
+function isLegacyShape(
+  raw: LegacyLoxoneConfig | LoxoneConfig,
+): raw is LegacyLoxoneConfig & { temperatureSensorUUID: string } {
+  const r = raw as LegacyLoxoneConfig & { sensors?: unknown };
+  return (
+    !!r &&
+    typeof r === 'object' &&
+    !Array.isArray(r.sensors) &&
+    typeof r.temperatureSensorUUID === 'string'
+  );
+}
+
 const POI_CACHE_TIMESTAMP_KEY = 'meteoblick_poi_cache_timestamp';
 const POI_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -130,62 +182,125 @@ export const SharedStorage = {
   },
 
   // Loxone Configuration
-  async getLoxoneConfig(): Promise<{
-    cloudAddress: string;
-    username: string;
-    password: string;
-    temperatureSensorUUID?: string;
-    temperatureSensorName?: string;
-    enabled: boolean;
-  } | null> {
-    try {
-      const json = await AsyncStorage.getItem('loxone_config');
-      if (!json) return null;
-      return JSON.parse(json);
-    } catch (error) {
-      console.error('Failed to read Loxone config:', error);
-      return null;
-    }
-  },
+async getLoxoneConfig(): Promise<LoxoneConfig | null> {
+  try {
+    const json = await AsyncStorage.getItem('loxone_config');
+    if (!json) return null;
+    const raw = JSON.parse(json);
 
-  async setLoxoneConfig(config: {
-    cloudAddress: string;
-    username: string;
-    password: string;
-    temperatureSensorUUID?: string;
-    temperatureSensorName?: string;
-    enabled: boolean;
-  }): Promise<void> {
-    try {
-      const json = JSON.stringify(config);
-      // AsyncStorage: source of truth for the host app.
-      await AsyncStorage.setItem('loxone_config', json);
-      // App Group: mirror so the iOS Widget Extension can read it.
-      // Excludes `enabled` since the widget shouldn't toggle on/off via
-      // its own logic — that's a user-facing toggle only.
-      if (config.enabled) {
-        const widgetConfig = {
-          cloudAddress: config.cloudAddress,
-          username: config.username,
-          password: config.password,
-          temperatureSensorUUID: config.temperatureSensorUUID,
-        };
-        await SharedGroupPreferences.setItem(
-          WIDGET_LOXONE_CONFIG_KEY,
-          JSON.stringify(widgetConfig),
-          APP_GROUP_ID,
-        );
-      } else {
-        // Toggle off → clear widget copy so the widget stops fetching.
-        // react-native-shared-group-preferences has no removeItem; empty string signals disabled.
-        await SharedGroupPreferences.setItem(WIDGET_LOXONE_CONFIG_KEY, '', APP_GROUP_ID);
-      }
-      console.log('✅ Loxone config saved (app + widget mirror)');
-    } catch (error) {
-      console.error('Failed to save Loxone config:', error);
-      throw error;
+    // Migration: legacy single-sensor → array shape.
+    if (isLegacyShape(raw)) {
+      const migrated: LoxoneConfig = {
+        cloudAddress: raw.cloudAddress,
+        username: raw.username,
+        password: raw.password,
+        enabled: raw.enabled,
+        sensors: [
+          {
+            uuid: raw.temperatureSensorUUID,
+            name: raw.temperatureSensorName ?? raw.temperatureSensorUUID,
+            showInApp: true,
+            showInWidget: true,
+            order: 0,
+          },
+        ],
+      };
+      // Persist migrated shape; from now on the legacy branch is skipped.
+      await AsyncStorage.setItem('loxone_config', JSON.stringify(migrated));
+      return migrated;
     }
-  },
+
+    return raw as LoxoneConfig;
+  } catch (error) {
+    console.error('Failed to read Loxone config:', error);
+    return null;
+  }
+},
+
+async setLoxoneConfig(config: LoxoneConfig): Promise<void> {
+  try {
+    const json = JSON.stringify(config);
+    // AsyncStorage: source of truth for the host app.
+    await AsyncStorage.setItem('loxone_config', json);
+    // App Group: mirror so the iOS Widget Extension can read it.
+    // Excludes `enabled` since the widget shouldn't toggle on/off via
+    // its own logic — that's a user-facing toggle only.
+    if (config.enabled) {
+      // Mirror keeps `temperatureSensorUUID` (legacy single-sensor field)
+      // set to the first showInWidget sensor — preserves current widget
+      // behavior until Phase 4b overhauls the mirror + Swift client.
+      const widgetConfig = {
+        cloudAddress: config.cloudAddress,
+        username: config.username,
+        password: config.password,
+        temperatureSensorUUID: config.sensors.find((s) => s.showInWidget)?.uuid,
+      };
+      await SharedGroupPreferences.setItem(
+        WIDGET_LOXONE_CONFIG_KEY,
+        JSON.stringify(widgetConfig),
+        APP_GROUP_ID,
+      );
+    } else {
+      // Toggle off → clear widget copy so the widget stops fetching.
+      // react-native-shared-group-preferences has no removeItem; empty string signals disabled.
+      await SharedGroupPreferences.setItem(WIDGET_LOXONE_CONFIG_KEY, '', APP_GROUP_ID);
+    }
+    console.log('✅ Loxone config saved (app + widget mirror)');
+  } catch (error) {
+    console.error('Failed to save Loxone config:', error);
+    throw error;
+  }
+},
+
+// ─── Multi-sensor granular ops ──────────────────────────────────────
+//
+// All ops read via getLoxoneConfig (which migrates legacy shape on first
+// read) and write back the full new shape. Return the updated config so
+// callers can update local state without a second fetch.
+
+async addSensor(sensor: Omit<Sensor, 'order'>): Promise<LoxoneConfig | null> {
+  const config = await this.getLoxoneConfig();
+  if (!config) return null;
+  const maxOrder = config.sensors.reduce((max, s) => Math.max(max, s.order), -1);
+  const next: Sensor = { ...sensor, order: maxOrder + 1 };
+  await this.setLoxoneConfig({ ...config, sensors: [...config.sensors, next] });
+  return { ...config, sensors: [...config.sensors, next] };
+},
+
+async removeSensor(uuid: string): Promise<LoxoneConfig | null> {
+  const config = await this.getLoxoneConfig();
+  if (!config) return null;
+  const remaining = config.sensors
+    .filter((s) => s.uuid !== uuid)
+    // Re-number orders to be contiguous after removal.
+    .map((s, i) => ({ ...s, order: i }));
+  await this.setLoxoneConfig({ ...config, sensors: remaining });
+  return { ...config, sensors: remaining };
+},
+
+async updateSensor(
+  uuid: string,
+  partial: Partial<Omit<Sensor, 'uuid'>>,
+): Promise<LoxoneConfig | null> {
+  const config = await this.getLoxoneConfig();
+  if (!config) return null;
+  const next = config.sensors.map((s) => (s.uuid === uuid ? { ...s, ...partial } : s));
+  await this.setLoxoneConfig({ ...config, sensors: next });
+  return { ...config, sensors: next };
+},
+
+async reorderSensors(orderedUuids: string[]): Promise<LoxoneConfig | null> {
+  const config = await this.getLoxoneConfig();
+  if (!config) return null;
+  const byUuid = new Map(config.sensors.map((s) => [s.uuid, s]));
+  const next = orderedUuids.map((uuid, i) => {
+    const s = byUuid.get(uuid);
+    if (!s) throw new Error(`Unknown sensor uuid: ${uuid}`);
+    return { ...s, order: i };
+  });
+  await this.setLoxoneConfig({ ...config, sensors: next });
+  return { ...config, sensors: next };
+},
 
   async deleteLoxoneConfig(): Promise<void> {
     try {

@@ -191,8 +191,11 @@ export default function LoxoneConfigScreen() {
       setCloudAddress(config.cloudAddress);
       setUsername(config.username);
       setPassword(config.password);
-      setSelectedSensorUUID(config.temperatureSensorUUID);
-      if (config.enabled && config.temperatureSensorUUID) {
+      // Phase 1: read the first sensor as the "currently selected" sensor.
+      // Phase 2 will replace this single-sensor UI with the full sensor list.
+      const firstSensor = config.sensors[0];
+      setSelectedSensorUUID(firstSensor?.uuid);
+      if (config.enabled && firstSensor) {
         setConfigSaved(true);
         setShowConnection(false);
         setShowSensors(false);
@@ -296,15 +299,24 @@ export default function LoxoneConfigScreen() {
     try {
       // Look up the sensor name to persist alongside the UUID
       const sensor = sensors.find((s) => s.uuid === selectedSensorUUID);
-      const temperatureSensorName = sensor?.name;
+      const sensorName = sensor?.name ?? selectedSensorUUID;
 
+      // Phase 1: wrap the single selected sensor in the new array shape.
+      // Phase 2 will replace this with the full sensor list UX.
       await SharedStorage.setLoxoneConfig({
         cloudAddress,
         username,
         password,
-        temperatureSensorUUID: selectedSensorUUID,
-        temperatureSensorName,
         enabled,
+        sensors: [
+          {
+            uuid: selectedSensorUUID,
+            name: sensorName,
+            showInApp: true,
+            showInWidget: true,
+            order: 0,
+          },
+        ],
       });
 
       // Trigger a weather refresh so the widget picks up the new sensor
