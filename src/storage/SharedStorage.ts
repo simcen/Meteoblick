@@ -1,6 +1,6 @@
 import SharedGroupPreferences from 'react-native-shared-group-preferences';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { APP_GROUP_ID, POI_STORAGE_KEY, WEATHER_DATA_KEY, WIDGET_LAST_REFRESH_KEY, WIDGET_LOXONE_CONFIG_KEY, WIDGET_LOXONE_SENSOR_DATA_KEY, WIDGET_TIMELINE_CALLED_KEY, WIDGET_SNAPSHOT_WRITTEN_AT_KEY, THEME_PREFERENCE_KEY } from '../constants';
+import { APP_GROUP_ID, API_BASE_URL, POI_STORAGE_KEY, WEATHER_DATA_KEY, WIDGET_LAST_REFRESH_KEY, WIDGET_LOXONE_CONFIG_KEY, WIDGET_LOXONE_SENSOR_DATA_KEY, WIDGET_TIMELINE_CALLED_KEY, WIDGET_SNAPSHOT_WRITTEN_AT_KEY, THEME_PREFERENCE_KEY } from '../constants';
 import type { WeatherData } from '../types/weather';
 import type { POI } from '../types/poi';
 
@@ -235,14 +235,28 @@ async setLoxoneConfig(config: LoxoneConfig): Promise<void> {
     // Excludes `enabled` since the widget shouldn't toggle on/off via
     // its own logic — that's a user-facing toggle only.
     if (config.enabled) {
-      // Mirror keeps `temperatureSensorUUID` (legacy single-sensor field)
-      // set to the first showInWidget sensor — preserves current widget
-      // behavior until Phase 4b overhauls the mirror + Swift client.
+      // Also mirror poiId + apiBaseUrl so the widget can call
+      // /api/widget/timeline?poiId=... without needing the host app.
+      const poiId = (await SharedStorage.getPointId()) ?? '';
+      const apiBaseUrl = API_BASE_URL;
+      // Mirror: credentials + ALL showInWidget sensor UUIDs + POI.
+      // Phase 4b+: widget TimelineProvider fetches all data itself on every
+      // timeline reload — calls /api/widget/timeline for weather and
+      // LoxoneWidgetClient for multi-sensor. The App continues to write
+      // snapshots opportunistically (foreground / BG fetch / pull-to-refresh)
+      // as a fallback for the widget when iOS throttles timeline refreshes.
       const widgetConfig = {
         cloudAddress: config.cloudAddress,
         username: config.username,
         password: config.password,
-        temperatureSensorUUID: config.sensors.find((s) => s.showInWidget)?.uuid,
+        showInWidgetSensorUuids: config.sensors
+          .filter((s) => s.showInWidget)
+          .map((s) => s.uuid),
+        // Mirrored so the widget can call /api/widget/timeline?poiId=...
+        // for weather data without needing the host app to push it.
+        // Empty string signals "not configured" → widget keeps cached snapshot.
+        poiId,
+        apiBaseUrl,
       };
       await SharedGroupPreferences.setItem(
         WIDGET_LOXONE_CONFIG_KEY,
