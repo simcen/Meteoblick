@@ -66,15 +66,15 @@ export default function SmartHomeScreen() {
           shadowRadius: 2,
           elevation: 1,
         },
-        cardTitle: { ...Typography.headline, color: colors.label.primary, marginBottom: Spacing.md },
+        cardTitle: { ...Typography.title3, color: colors.label.primary, marginBottom: Spacing.md },
         temperature: {
-          fontSize: 48,
+          fontSize: 36,
           fontWeight: '700',
           color: colors.label.primary,
           marginBottom: Spacing.xs,
         },
         temperaturePlaceholder: {
-          fontSize: 48,
+          fontSize: 36,
           fontWeight: '300',
           color: colors.label.tertiary,
           marginBottom: Spacing.xs,

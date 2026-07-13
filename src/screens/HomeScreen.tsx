@@ -32,7 +32,8 @@ export default function HomeScreen() {
           paddingHorizontal: Spacing.screenHorizontal,
           paddingBottom: Spacing.lg,
         },
-        title: { ...Typography.title2, color: colors.label.primary, marginBottom: Spacing.md },
+        title: { ...Typography.title2, color: colors.label.primary, marginBottom: Spacing.xs },
+        subtitle: { ...Typography.subheadline, color: colors.label.secondary, marginBottom: Spacing.lg },
         weatherCard: {
           backgroundColor: colors.background.primary,
           borderRadius: Layout.radius.md,
@@ -136,6 +137,9 @@ export default function HomeScreen() {
         scrollEventThrottle={16}
       >
         <Text style={styles.title}>Wetter</Text>
+        <Text style={styles.subtitle}>
+          MeteoSwiss-Wetter und aktuelle Messwerte.
+        </Text>
 
         {weatherData ? (
           <View style={styles.weatherCard}>
@@ -145,14 +149,14 @@ export default function HomeScreen() {
               <View style={styles.tempBlock}>
                 <Text style={styles.tempLabel}>Aktuell</Text>
                 <Text style={styles.tempValue}>
-                  {weatherData.temperatureActual?.toFixed(1) ?? '--'}°
+                  🌡️ {weatherData.temperatureActual?.toFixed(1) ?? '--'}°
                 </Text>
               </View>
               <View style={styles.tempDivider} />
               <View style={styles.tempBlock}>
                 <Text style={styles.tempLabel}>Prognose</Text>
                 <Text style={styles.tempValue}>
-                  {weatherData.temperatureForecast?.toFixed(1) ?? '--'}°
+                  🌤️ {weatherData.temperatureForecast?.toFixed(1) ?? '--'}°
                 </Text>
               </View>
             </View>
