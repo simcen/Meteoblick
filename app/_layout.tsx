@@ -39,8 +39,19 @@ const TabBarIcon = (sfSymbolName: string) => {
 };
 
 function TabNavigator() {
+  // iOS 26 native Liquid Glass tab bar. Without translucent: true the native
+  // UITabBar falls back to an opaque white surface in light mode. Setting
+  // scrollEdgeAppearance: 'transparent' keeps it translucent when scrolled
+  // content reaches the bottom. experimental_bakedTintColors enables the
+  // iOS 26 Liquid Glass tint workaround (library hint for correct label
+  // colors on the glass surface).
   return (
-    <Tabs.Navigator>
+    <Tabs.Navigator
+      translucent
+      scrollEdgeAppearance="transparent"
+      experimental_bakedTintColors
+      tabBarStyle={{ backgroundColor: 'transparent' }}
+    >
       <Tabs.Screen
         name="Wetter"
         component={HomeScreen}
