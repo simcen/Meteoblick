@@ -219,10 +219,14 @@ export default function SmartHomeScreen() {
             ) : (
               <View style={styles.card}>
                 <Text style={styles.cardTitle}>Sensoren</Text>
-                {appSensors.map((sensor) => {
+                {appSensors.map((sensor, idx) => {
                   const reading = readingsByUuid.get(sensor.uuid);
+                  const isLast = idx === appSensors.length - 1;
                   return (
-                    <View key={sensor.uuid} style={styles.sensorRow}>
+                    <View
+                      key={sensor.uuid}
+                      style={[styles.sensorRow, isLast && styles.sensorRowLast]}
+                    >
                       <View style={styles.sensorMain}>
                         <Text style={styles.sensorName}>{sensor.name}</Text>
                         {reading ? (
