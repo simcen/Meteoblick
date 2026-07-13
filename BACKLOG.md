@@ -25,6 +25,9 @@ values: `open` / `exploring` / `in-progress` / `done` / `reverted`.
     LoxoneConfigScreen has "Loxone aktivieren" (master enable) and
     "Verbindung" (in-app/widget flags) as separate UI. A SegmentedControl
     would unify them. (Replaces the current combined card.)
+  - **Swipe-to-delete action label** — currently shows the text "Löschen"
+    on a red background. Replace with a trash icon (🗑 / 🎀) to match
+    iOS-native Mail/Messages delete affordance.
   - Sensor types beyond temperature (humidity, brightness, ...) — D1 deferred
 
 ### Drawer → Stack (experimental)
