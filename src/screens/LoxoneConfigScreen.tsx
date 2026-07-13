@@ -320,6 +320,26 @@ export default function LoxoneConfigScreen() {
     );
   };
 
+  // ─── Rename (Phase 2.3) ─────────────────────────────────────────
+  // iOS only — RN's Alert.prompt isn't supported on Android. Fine for
+  // this app (iOS-only).
+  const renameSensor = (uuid: string) => {
+    const sensor = sensors.find((s) => s.uuid === uuid);
+    if (!sensor) return;
+    Alert.prompt(
+      'Sensor umbenennen',
+      undefined,
+      async (text) => {
+        const next = text?.trim();
+        if (!next || next === sensor.name) return;
+        setSensors((prev) => prev.map((s) => (s.uuid === uuid ? { ...s, name: next } : s)));
+        await SharedStorage.updateSensor(uuid, { name: next });
+      },
+      'plain-text',
+      sensor.name,
+    );
+  };
+
   // ─── Sensor picker (Phase 2.2) ──────────────────────────────────
   const [pickerVisible, setPickerVisible] = useState(false);
   const openPicker = () => {
@@ -526,9 +546,17 @@ export default function LoxoneConfigScreen() {
 
                     {/* Name + meta */}
                     <View style={styles.sensorMain}>
-                      <Text style={styles.sensorName} numberOfLines={1}>
-                        {item.name}
-                      </Text>
+                      <TouchableOpacity
+                        onLongPress={() => renameSensor(item.uuid)}
+                        delayLongPress={500}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${item.name} umbenennen, lange drücken`}
+                        accessibilityHint="Lange drücken zum Umbenennen"
+                      >
+                        <Text style={styles.sensorName} numberOfLines={1}>
+                          {item.name}
+                        </Text>
+                      </TouchableOpacity>
                       <Text style={styles.sensorMeta} numberOfLines={1}>
                         {item.uuid.slice(0, 8)}…
                       </Text>

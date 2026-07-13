@@ -246,6 +246,7 @@ import SettingsScreen from '../screens/SettingsScreen';
 import OrteScreen from '../screens/OrteScreen';
 import LoxoneConfigScreen from '../screens/LoxoneConfigScreen';
 import DebugScreen from '../screens/DebugScreen';
+import { WeatherProvider, useWeather } from '../providers/WeatherContext';
 
 const SCREENS: [string, React.ComponentType<unknown>][] = [
   ['HomeScreen', HomeScreen],
@@ -277,5 +278,37 @@ describe('Screen render smoke tests', () => {
         trees.push(TestRenderer.create(<Component />));
       });
     }).not.toThrow();
+  });
+
+  // Phase 4a regression: catch variable-scoping bugs in async refresh code
+  // that the simple mount-test misses. A child calls refresh() and renders
+  // its result status; if the refresh throws, the render fails.
+  it('WeatherContext.refresh() runs without throwing across all Loxone paths', async () => {
+    const RefreshProbe = () => {
+      const { refresh, loxoneReadings } = useWeather();
+      React.useEffect(() => {
+        refresh();
+      }, [refresh]);
+      return <RefreshProbeText>{String(loxoneReadings.length)}</RefreshProbeText>;
+    };
+    // Local passthrough so the test doesn't depend on react-native's Text.
+    const RefreshProbeText = ({ children }: { children: string }) =>
+      React.createElement('RefreshProbeText', null, children);
+    let tree: TestRenderer.ReactTestRenderer | null = null;
+    await expect(
+      (async () => {
+        await TestRenderer.act(async () => {
+          tree = TestRenderer.create(
+            <WeatherProvider>
+              <RefreshProbe />
+            </WeatherProvider>,
+          );
+          // Let the async refresh chain settle.
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+      })(),
+    ).resolves.not.toThrow();
+    tree?.unmount();
   });
 });

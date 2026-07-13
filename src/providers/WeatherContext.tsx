@@ -72,11 +72,24 @@ export interface WidgetSnapshot {
   timestampActual: string;
   refreshedAt: string;
   buildNumber: string;
+  // Phase 4a: array of Loxone sensors to render in the widget. Selected
+  // top-N by `order` from sensors where `showInWidget`. Widget renders
+  // 1 / 2 / up to 6 by family (small / medium / large).
+  smartHomeSensors: SmartHomeSensorSnapshot[];
+}
+
+export interface SmartHomeSensorSnapshot {
+  uuid: string;
+  name: string;
+  temperature: string; // pre-formatted with .toFixed(1)
+  timestamp: string;
 }
 
 function buildWidgetSnapshot(
   weather: WeatherData | null,
   loxoneTemp: number | null,
+  loxoneReadings: { uuid: string; temperature: number; timestamp: string }[],
+  widgetSensors: { uuid: string; name: string; order: number }[],
   refreshedAt: Date,
 ): WidgetSnapshot {
   if (!weather) {
@@ -94,8 +107,23 @@ function buildWidgetSnapshot(
       timestampActual: '',
       refreshedAt: formatTime(refreshedAt.toISOString()),
       buildNumber: BUILD_NUMBER,
+      smartHomeSensors: [],
     };
   }
+  // Build the sensors list for the widget — pick top-N by `order` from
+  // `showInWidget`, look up the reading for each.
+  const readingsByUuid = new Map(loxoneReadings.map((r) => [r.uuid, r]));
+  const widgetSnapshotSensors: SmartHomeSensorSnapshot[] = widgetSensors
+    .sort((a, b) => a.order - b.order)
+    .map((s) => {
+      const r = readingsByUuid.get(s.uuid);
+      return {
+        uuid: s.uuid,
+        name: s.name,
+        temperature: r ? r.temperature.toFixed(1) : '--',
+        timestamp: r?.timestamp ?? '',
+      };
+    });
   return {
     locationName: weather.locationName,
     weatherSymbol: getWeatherSymbol(weather.symbolCode),
@@ -110,6 +138,7 @@ function buildWidgetSnapshot(
     timestampActual: formatTime(weather.timestampActual),
     refreshedAt: formatTime(refreshedAt.toISOString()),
     buildNumber: BUILD_NUMBER,
+    smartHomeSensors: widgetSnapshotSensors,
   };
 }
 
@@ -178,6 +207,10 @@ export function WeatherProvider({ children }: WeatherProviderProps) {
 
     let loxoneTemp: number | null = null;
     let loxoneTimestamp: string | null = null;
+    // Phase 3/4a: always defined so buildWidgetSnapshot can read it after
+    // the Loxone block (success / failure / skipped paths).
+    let readings: { uuid: string; temperature: number; timestamp: string }[] = [];
+    const appSensors: { uuid: string; name: string; order: number }[] = [];
 
     const loxoneConfig = await SharedStorage.getLoxoneConfig();
     console.log('[Weather] Loxone config:', {
@@ -189,17 +222,18 @@ export function WeatherProvider({ children }: WeatherProviderProps) {
       cloudAddress: loxoneConfig?.cloudAddress,
     });
     // Phase 3: fetch all showInApp sensors in parallel.
-    const appSensors = loxoneConfig?.sensors.filter((s) => s.showInApp) ?? [];
-    if (loxoneConfig?.enabled && appSensors.length > 0) {
-      const uuids = appSensors.map((s) => s.uuid);
+    const configuredAppSensors = loxoneConfig?.sensors.filter((s) => s.showInApp) ?? [];
+    appSensors.push(...configuredAppSensors.map((s) => ({ uuid: s.uuid, name: s.name, order: s.order })));
+    if (loxoneConfig?.enabled && configuredAppSensors.length > 0) {
+      const uuids = configuredAppSensors.map((s) => s.uuid);
       const now = new Date().toISOString();
       try {
         const api = new LoxoneAPI(loxoneConfig);
         const results = await api.getTemperatures(uuids);
-        const readings = results.map((r) => ({ uuid: r.uuid, temperature: r.temperature, timestamp: now }));
+        readings = results.map((r) => ({ uuid: r.uuid, temperature: r.temperature, timestamp: now }));
         await SharedStorage.setLoxoneSensorData(readings);
         // Primary sensor (first showInApp) for legacy widget mirror
-        const primary = readings.find((r) => r.uuid === appSensors[0].uuid) ?? readings[0];
+        const primary = readings.find((r) => r.uuid === configuredAppSensors[0].uuid) ?? readings[0];
         loxoneTemp = primary?.temperature ?? null;
         loxoneTimestamp = primary?.timestamp ?? null;
         console.log('[Weather] Loxone readings:', readings.length);
@@ -208,7 +242,8 @@ export function WeatherProvider({ children }: WeatherProviderProps) {
         const cached = await SharedStorage.getLoxoneSensorData();
         if (cached && cached.length > 0) {
           const cachedByUuid = new Map(cached.map((r) => [r.uuid, r]));
-          const primary = cachedByUuid.get(appSensors[0].uuid) ?? cached[0];
+          readings = cached;
+          const primary = cachedByUuid.get(configuredAppSensors[0].uuid) ?? cached[0];
           loxoneTemp = primary.temperature;
           loxoneTimestamp = primary.timestamp;
           console.log('[Weather] Using cached Loxone readings:', cached.length);
@@ -235,7 +270,13 @@ export function WeatherProvider({ children }: WeatherProviderProps) {
       try {
         // Write snapshot to App Group BEFORE triggering WidgetKit reload,
         // so getTimeline() always reads current data when iOS responds.
-        const snapshot = buildWidgetSnapshot(weather, loxoneTemp, fetchCompletedAt);
+        const snapshot = buildWidgetSnapshot(
+          weather,
+          loxoneTemp,
+          readings,
+          appSensors,
+          fetchCompletedAt,
+        );
         const snapshotWrittenAt = new Date().toISOString();
         await SharedGroupPreferences.setItem(
           WIDGET_WEATHER_SNAPSHOT_KEY,

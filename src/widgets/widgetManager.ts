@@ -22,7 +22,7 @@ export interface WidgetProps {
   locationName: string;
   temperatureActual?: number;      // MeteoSwiss IST (letzte vergangene Stunde)
   temperatureForecast?: number;    // MeteoSwiss Prognose (nächste zukünftige Stunde)
-  temperatureLoxone?: number;      // Loxone Sensor IST
+  temperatureLoxone?: number;      // Loxone primary sensor (legacy compat)
   symbolCode: number;
   precipitation: number;
   buildNumber: string;
@@ -30,6 +30,17 @@ export interface WidgetProps {
   timestampForecast?: string;     // ISO timestamp für MeteoSwiss Prognose
   timestampLoxone?: string;       // ISO timestamp für Loxone
   refreshedAt?: string;           // ISO timestamp when widget was updated
+  // Phase 4a: array of Loxone sensors to show in the widget. Selected
+  // top-N by `order` from sensors where `showInWidget`. Widget renders
+  // 1 / 2 / up to 6 by family.
+  smartHomeSensors?: SmartHomeSensorWidget[];
+}
+
+export interface SmartHomeSensorWidget {
+  uuid: string;
+  name: string;
+  temperature: number;
+  timestamp: string;
 }
 
 /**
