@@ -401,7 +401,7 @@ function SegmentedControl<T extends string>({
 const segStyles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    borderRadius: Layout.radius.lg, // 16pt — matches menuGroup
+    borderRadius: Layout.radius.lg, // 16pt — matches menuGroup + LiquidGlass button
     padding: 2,
   },
   segment: {
@@ -409,7 +409,9 @@ const segStyles = StyleSheet.create({
     paddingVertical: 7,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 9,
+    // Layout.radius.md (12pt) leaves a 2pt corner margin inside the 16pt
+    // container — matches iOS segmented control proportions.
+    borderRadius: Layout.radius.md,
   },
   segmentActive: {},
   segmentLabel: {
