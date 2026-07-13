@@ -385,18 +385,23 @@ export default function DebugScreen() {
                 </View>
               </>
             )}
-            {loxoneSensorData ? (
+            {loxoneSensorData && loxoneSensorData.length > 0 ? (
               <>
                 <View style={styles.debugRow}>
-                  <Text style={styles.debugLabel}>Letzte Temperatur:</Text>
-                  <Text style={styles.debugValue}>{loxoneSensorData.temperature.toFixed(1)}°C</Text>
+                  <Text style={styles.debugLabel}>Sensoren (Cache):</Text>
+                  <Text style={styles.debugValue}>{loxoneSensorData.length} Readings</Text>
                 </View>
-                <View style={styles.debugRow}>
-                  <Text style={styles.debugLabel}>Sensor Update:</Text>
-                  <Text style={styles.debugValue}>
-                    {new Date(loxoneSensorData.timestamp).toLocaleString('de-CH')}
-                  </Text>
-                </View>
+                {loxoneSensorData.map((r: { uuid: string; temperature: number; timestamp: string }, i: number) => (
+                  <View key={r.uuid} style={styles.debugRow}>
+                    <Text style={styles.debugLabel}>
+                      #{i + 1} {r.uuid.slice(0, 8)}…
+                    </Text>
+                    <Text style={styles.debugValue}>
+                      {r.temperature.toFixed(1)}°C ·{' '}
+                      {new Date(r.timestamp).toLocaleString('de-CH')}
+                    </Text>
+                  </View>
+                ))}
               </>
             ) : loxoneConfig?.enabled ? (
               <View style={styles.debugRow}>
