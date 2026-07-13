@@ -20,6 +20,7 @@ import {
   Switch,
   TouchableOpacity,
   ScrollView,
+  Modal,
 } from 'react-native';
 import DraggableFlatList, {
   RenderItemParams,
@@ -319,6 +320,27 @@ export default function LoxoneConfigScreen() {
     );
   };
 
+  // ─── Sensor picker (Phase 2.2) ──────────────────────────────────
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const openPicker = () => {
+    if (!username || !password) {
+      Alert.alert('Fehler', 'Bitte zuerst Username und Passwort eingeben');
+      return;
+    }
+    setPickerVisible(true);
+  };
+  const handleSensorPicked = async (sensor: { uuid: string; name: string }) => {
+    setPickerVisible(false);
+    const updated = await SharedStorage.addSensor({
+      uuid: sensor.uuid,
+      name: sensor.name,
+      showInApp: true,
+      showInWidget: true,
+    });
+    if (updated) setSensors(updated.sensors);
+    await refreshWeather();
+  };
+
   // ─── Save (master + sensors) ────────────────────────────────────
   const saveConfig = async () => {
     setLoading(true);
@@ -553,12 +575,7 @@ export default function LoxoneConfigScreen() {
           {/* Add sensor (Phase 2.2: opens picker) */}
           <TouchableOpacity
             style={styles.addButton}
-            onPress={() =>
-              Alert.alert(
-                'Sensor hinzufügen',
-                'Picker kommt in Phase 2.2 — bis dahin Sensor manuell via Storage konfigurieren.',
-              )
-            }
+            onPress={openPicker}
             accessibilityRole="button"
           >
             <Text style={styles.addButtonText}>+ Sensor hinzufügen</Text>
@@ -590,6 +607,193 @@ export default function LoxoneConfigScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Sensor picker modal (Phase 2.2) */}
+      <LoxoneSensorPicker
+        visible={pickerVisible}
+        cloudAddress={cloudAddress}
+        username={username}
+        password={password}
+        existingUuids={sensors.map((s) => s.uuid)}
+        onClose={() => setPickerVisible(false)}
+        onSelect={handleSensorPicked}
+      />
     </SafeAreaView>
+  );
+}
+
+/**
+ * LoxoneSensorPicker — modal that scans the configured Loxone Miniserver
+ * for temperature sensors and lets the user add one to the configured list.
+ * Already-configured UUIDs are filtered out so the user can't add duplicates.
+ *
+ * Phase 2.2: name = Loxone name on add (D6 pre-fill, editable later).
+ * Filters by name / room / type via a search field.
+ */
+function LoxoneSensorPicker({
+  visible,
+  cloudAddress,
+  username,
+  password,
+  existingUuids,
+  onClose,
+  onSelect,
+}: {
+  visible: boolean;
+  cloudAddress: string;
+  username: string;
+  password: string;
+  existingUuids: string[];
+  onClose: () => void;
+  onSelect: (sensor: { uuid: string; name: string }) => void;
+}) {
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+  const [sensors, setSensors] = useState<{ uuid: string; name: string; room: string; type: string; category: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [query, setQuery] = useState('');
+
+  useEffect(() => {
+    if (!visible) return;
+    setQuery('');
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const api = new LoxoneAPI({ cloudAddress, username, password });
+        const found = await api.getTemperatureSensors();
+        if (cancelled) return;
+        const available = found.filter((s) => !existingUuids.includes(s.uuid));
+        setSensors(available);
+      } catch (error: any) {
+        if (cancelled) return;
+        Alert.alert('Fehler beim Laden', error.message || 'Konnte Sensoren nicht laden');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        modalRoot: { flex: 1, backgroundColor: colors.background.grouped },
+        modalHeader: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingHorizontal: Spacing.md,
+          paddingTop: insets.top + Spacing.sm,
+          paddingBottom: Spacing.sm,
+        },
+        modalTitle: { ...Typography.headline, color: colors.label.primary },
+        modalCancel: { ...Typography.body, color: colors.tint },
+        search: {
+          backgroundColor: colors.fill.tertiary,
+          borderRadius: Layout.radius.md,
+          paddingHorizontal: Spacing.md,
+          paddingVertical: Spacing.sm,
+          marginHorizontal: Spacing.md,
+          marginBottom: Spacing.sm,
+          color: colors.label.primary,
+          ...Typography.body,
+        },
+        row: {
+          backgroundColor: colors.background.groupedSecondary,
+          paddingHorizontal: Spacing.md,
+          paddingVertical: Spacing.md,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: colors.separator.nonOpaque,
+        },
+        rowName: { ...Typography.body, color: colors.label.primary, fontWeight: '500' },
+        rowMeta: {
+          ...Typography.caption2,
+          color: colors.label.secondary,
+          marginTop: 2,
+        },
+        empty: {
+          paddingVertical: Spacing.xl,
+          alignItems: 'center',
+        },
+        emptyText: { ...Typography.subheadline, color: colors.label.secondary },
+        list: { paddingBottom: Spacing.lg },
+      }),
+    [colors, insets.top],
+  );
+
+  const filtered = query.trim()
+    ? sensors.filter((s) => {
+        const q = query.toLowerCase();
+        return (
+          s.name.toLowerCase().includes(q) ||
+          s.room.toLowerCase().includes(q) ||
+          s.type.toLowerCase().includes(q) ||
+          s.category.toLowerCase().includes(q)
+        );
+      })
+    : sensors;
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
+      <SafeAreaView style={styles.modalRoot} edges={['bottom']}>
+        <View style={styles.modalHeader}>
+          <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+            <Text style={styles.modalCancel}>Abbrechen</Text>
+          </TouchableOpacity>
+          <Text style={styles.modalTitle}>Sensor wählen</Text>
+          <View style={{ width: 70 }} />
+        </View>
+
+        <TextInput
+          style={styles.search}
+          value={query}
+          onChangeText={setQuery}
+          placeholder="🔍 Sensor suchen (Name, Raum, Typ)..."
+          placeholderTextColor={colors.label.tertiary}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+
+        {loading ? (
+          <View style={styles.empty}>
+            <ActivityIndicator />
+          </View>
+        ) : filtered.length === 0 ? (
+          <View style={styles.empty}>
+            <Text style={styles.emptyText}>
+              {sensors.length === 0
+                ? 'Keine weiteren Temperatursensoren im Miniserver gefunden.'
+                : 'Kein Sensor passt zur Suche.'}
+            </Text>
+          </View>
+        ) : (
+          <ScrollView style={styles.list}>
+            {filtered.map((sensor) => (
+              <TouchableOpacity
+                key={sensor.uuid}
+                style={styles.row}
+                onPress={() => onSelect(sensor)}
+                accessibilityRole="button"
+                accessibilityLabel={`Sensor ${sensor.name} hinzufügen`}
+              >
+                <Text style={styles.rowName}>{sensor.name}</Text>
+                <Text style={styles.rowMeta}>
+                  {sensor.room} · {sensor.type}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+      </SafeAreaView>
+    </Modal>
   );
 }

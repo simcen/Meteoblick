@@ -14,17 +14,17 @@ values: `open` / `exploring` / `in-progress` / `done` / `reverted`.
 - Decision needed before implementation.
 
 ### Multi-Sensor Smart Home Support
-- Status: scoped (`docs/SCOPE_MULTI_SENSOR.md`), awaiting Phase 1 start
+- Status: scoped (`docs/SCOPE_MULTI_SENSOR.md`); Phase 1 + 2.1 done (storage,
+  migration, granular ops, multi-sensor UI with drag handle, flags, delete).
+  Phase 2.2 (add picker) next.
 - MVP scope: array of `{ uuid, name, showInApp, showInWidget, order }` sensors.
   Widget layout per family (small=1, medium=2, large=up to 6) selected top-N by
   `order` from `showInWidget` sensors. Widget timeline fetches its own sensors
   via flexible `getTemperatures(uuids[])` endpoint.
-- Out of MVP scope (deferred):
-  - **Sensor types beyond temperature** (humidity, brightness, etc.) — explicit
-    decision per D1
-  - Sensor history / charts
-  - Per-widget-family sensor selection
-  - Threshold notifications
+- Polish backlog (post-MVP):
+  - **Swipe-to-delete** instead of ✕ icon — more iOS-native for row removal
+  - Inline rename UX (long-press → modal with TextInput) — Phase 2.3
+  - Sensor types beyond temperature (humidity, brightness, ...) — D1 deferred
 
 ### Drawer → Stack (experimental)
 - Status: open — exploratory, may revert
