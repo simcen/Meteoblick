@@ -5,6 +5,17 @@ values: `open` / `exploring` / `in-progress` / `done` / `reverted`.
 
 ## Open
 
+### Lock Screen Widget
+- Status: open — needs scoping
+- Notes:
+- Decision needed before implementation.
+
+### Optimized usage of available widget space
+- Status: open — needs scoping
+- Notes:
+  - Less margins
+- Decision needed before implementation.
+
 ### Home Screen Widget
 - Status: open — needs scoping
 - Notes:

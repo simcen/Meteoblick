@@ -16,7 +16,7 @@ export const WIDGET_SNAPSHOT_WRITTEN_AT_KEY = 'meteoblick_widget_snapshot_writte
 export const THEME_PREFERENCE_KEY = 'theme_preference';
 
 // Build number (update before each release)
-export const BUILD_NUMBER = '260711-1108';
+export const BUILD_NUMBER = '260714-0934';
 
 // API Configuration
 // Production URL is the single source of truth. Dev override via

@@ -34,7 +34,7 @@ import { LoxoneAPI } from '../api/loxone';
 import { useWeather } from '../providers/WeatherContext';
 import { Button } from '../components/Button';
 import { LiquidGlassCloseButton } from '../components/LiquidGlassCloseButton';
-import { Typography, Spacing, Layout } from '../constants/designSystem';
+import { Typography, Spacing, Layout, Shadows } from '../constants/designSystem';
 import { useColors } from '../hooks/useColors';
 
 type Sensor = {
@@ -125,11 +125,12 @@ export default function LoxoneConfigScreen() {
           marginBottom: Spacing.md,
           color: colors.label.primary,
         },
-        // ─── Sensor rows (Phase 2.1) ──────────────────────────────────
+        // ─── Sensor rows (Phase 2.1) — iOS-Settings detail-row layout ──
         sensorRow: {
           flexDirection: 'row',
           alignItems: 'center',
-          paddingVertical: Spacing.sm,
+          paddingVertical: Spacing.md,
+          paddingHorizontal: Spacing.md,
           borderBottomWidth: StyleSheet.hairlineWidth,
           borderBottomColor: colors.separator.nonOpaque,
           backgroundColor: colors.background.groupedSecondary,
@@ -137,7 +138,7 @@ export default function LoxoneConfigScreen() {
         sensorRowLast: { borderBottomWidth: 0 },
         sensorDragHandle: {
           width: 32,
-          height: 44,
+          height: 28,
           justifyContent: 'center',
           alignItems: 'center',
           marginRight: Spacing.xs,
@@ -148,20 +149,55 @@ export default function LoxoneConfigScreen() {
           letterSpacing: -3, // tighten the three dots into stripes
           fontWeight: '700',
         },
+        sensorNameInline: {
+          ...Typography.body,
+          color: colors.label.primary,
+          flex: 1,
+          marginRight: Spacing.sm,
+        },
+        sensorValueInline: {
+          ...Typography.body,
+          color: colors.label.secondary,
+          marginRight: Spacing.xs,
+        },
+        sensorChevronInline: {
+          fontSize: 24,
+          color: colors.label.tertiary,
+        },
+        // (Phase 5.5 — these styles are kept around for back-compat but
+        //  no longer used. Remove in a follow-up if not referenced.)
+        sensorTopRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+        },
         sensorMain: { flex: 1, marginRight: Spacing.sm },
         sensorName: {
           ...Typography.body,
           color: colors.label.primary,
         },
-        sensorFlags: { flexDirection: 'row', alignItems: 'center', marginRight: Spacing.xs },
-        sensorFlag: {
-          marginLeft: Spacing.sm,
+        sensorFlagRow: {
+          marginTop: Spacing.sm,
+          marginLeft: 40,
+          paddingVertical: Spacing.sm,
+          paddingRight: Spacing.xs,
+          flexDirection: 'row',
           alignItems: 'center',
+        },
+        sensorFlagValueLabel: {
+          ...Typography.body,
+          color: colors.label.secondary,
+          flex: 1,
+          textAlign: 'right',
+          marginRight: Spacing.sm,
+        },
+        sensorFlagChevron: {
+          fontSize: 24,
+          color: colors.label.tertiary,
         },
         sensorFlagLabel: {
           ...Typography.caption2,
           color: colors.label.secondary,
-          marginBottom: 2,
+          marginBottom: Spacing.xs,
         },
         // Swipe-to-delete action — red background with label
         sensorSwipeAction: {
@@ -277,21 +313,11 @@ export default function LoxoneConfigScreen() {
     await SharedStorage.reorderSensors(data.map((s) => s.uuid));
   };
 
-  const toggleShowInApp = async (uuid: string) => {
-    const sensor = sensors.find((s) => s.uuid === uuid);
-    if (!sensor) return;
-    const next = !sensor.showInApp;
-    setSensors((prev) => prev.map((s) => (s.uuid === uuid ? { ...s, showInApp: next } : s)));
-    await SharedStorage.updateSensor(uuid, { showInApp: next });
-  };
-
-  const toggleShowInWidget = async (uuid: string) => {
-    const sensor = sensors.find((s) => s.uuid === uuid);
-    if (!sensor) return;
-    const next = !sensor.showInWidget;
-    setSensors((prev) => prev.map((s) => (s.uuid === uuid ? { ...s, showInWidget: next } : s)));
-    await SharedStorage.updateSensor(uuid, { showInWidget: next });
-  };
+  // Phase 5: 3-state visibility SegmentedControl ("App" / "Widget" /
+  // Phase 5.5: visibility editing moved to SensorVisibilityScreen.
+  // Tapping the row navigates there. The state lives there and the
+  // SharedStorage update is owned by that screen. (No setVisibility
+  // helper here anymore.)
 
   const deleteSensorWithConfirm = async (uuid: string) => {
     const sensor = sensors.find((s) => s.uuid === uuid);
@@ -441,10 +467,15 @@ export default function LoxoneConfigScreen() {
                     overshootRight={false}
                   >
                     <TouchableOpacity
+                      onPress={() =>
+                        (navigation as any).navigate('SensorVisibility', { uuid: item.uuid })
+                      }
                       onLongPress={drag}
                       delayLongPress={150}
                       disabled={isActive}
                       activeOpacity={0.85}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${item.name} Sichtbarkeit bearbeiten`}
                       style={[styles.sensorRow, isActive && { opacity: 0.85 }]}
                     >
                       {/* Drag handle — three-stripe icon (☰) on the left */}
@@ -452,42 +483,22 @@ export default function LoxoneConfigScreen() {
                         <Text style={styles.sensorDragHandleIcon}>≡</Text>
                       </View>
 
-                      {/* Name */}
-                      <View style={styles.sensorMain}>
-                        <TouchableOpacity
-                          onLongPress={() => renameSensor(item.uuid)}
-                          delayLongPress={500}
-                          accessibilityRole="button"
-                          accessibilityLabel={`${item.name} umbenennen, lange drücken`}
-                          accessibilityHint="Lange drücken zum Umbenennen"
-                        >
-                          <Text style={styles.sensorName} numberOfLines={1}>
-                            {item.name}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
+                      {/* Name (flex: 1) */}
+                      <Text style={styles.sensorNameInline} numberOfLines={1}>
+                        {item.name}
+                      </Text>
 
-                      {/* Flags: in-app + in-widget */}
-                      <View style={styles.sensorFlags}>
-                        <View style={styles.sensorFlag}>
-                          <Text style={styles.sensorFlagLabel}>App</Text>
-                          <Switch
-                            value={item.showInApp}
-                            onValueChange={() => toggleShowInApp(item.uuid)}
-                            trackColor={{ false: colors.separator.opaque, true: colors.tint }}
-                            thumbColor={colors.background.primary}
-                          />
-                        </View>
-                        <View style={styles.sensorFlag}>
-                          <Text style={styles.sensorFlagLabel}>Widget</Text>
-                          <Switch
-                            value={item.showInWidget}
-                            onValueChange={() => toggleShowInWidget(item.uuid)}
-                            trackColor={{ false: colors.separator.opaque, true: colors.tint }}
-                            thumbColor={colors.background.primary}
-                          />
-                        </View>
-                      </View>
+                      {/* Value (right) + chevron */}
+                      <Text style={styles.sensorValueInline}>
+                        {item.showInApp && item.showInWidget
+                          ? 'Beide'
+                          : item.showInApp
+                            ? 'App'
+                            : item.showInWidget
+                              ? 'Widget'
+                              : 'Beide'}
+                      </Text>
+                      <Text style={styles.sensorChevronInline}>›</Text>
                     </TouchableOpacity>
                   </Swipeable>
                 </ScaleDecorator>
