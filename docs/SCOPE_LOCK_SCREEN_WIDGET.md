@@ -35,11 +35,11 @@
  * PROPOSED FAMILIES (D1, D2 — locked)
  *   We add 2 Lock Screen families; 3rd (inline) is deferred.
  *
- *   ┌─────────────────────────┐
+   ┌─────────────────────────┐
  *   │ accessoryCircular       │  ~76pt square
- *   │      ┌─────┐             │
- *   │      │ 22° │             │  Primary temperature.
- *   │      └─────┘             │  iOS draws the AOD dimmed version
+ *   │      ┌─────┐             │  User-configurable: MeteoSwiss
+ *   │      │ 22° │             │  OR one Smart Home sensor
+ *   │      └─────┘             │  (default: MeteoSwiss)
  *   └─────────────────────────┘  on iPhone 14 Pro+.
  *
  *   ┌─────────────────────────────────────────┐
@@ -50,8 +50,14 @@
  *   └─────────────────────────────────────────┘
  *
  * CONTENT (D3 — locked)
- *   accessoryCircular  : 1 line: weather emoji + temperature
- *   accessoryRectangular: up to 4 lines: weather + top-N sensors
+ *   accessoryCircular  : ONE line, CONFIGURABLE per-user:
+ *                          a) MeteoSwiss:  🌤 22°
+ *                          b) Smart Home:   🏠 22.5°  Pool
+ *                        Configurable in app settings (Lock Screen
+ *                        section). Default: MeteoSwiss. Users who care
+ *                        more about home temp than weather can switch.
+ *
+ *   accessoryRectangular: weather + top-N sensors
  *                          by showInWidget order (max 2 lines for
  *                          readability on Lock Screen)
  *
@@ -90,12 +96,16 @@
  *     mode later.
  *
  * PHASING
- *   1. Update WidgetConfigurable.supportedFamilies in widget Swift
+ *   1. Add `lockScreenCircular` field to `WidgetConfig` (SharedStorage
+ *      mirror): "weather" | "<sensor-uuid>". Default: "weather".
+ *   2. Update WidgetConfigurable.supportedFamilies in widget Swift
  *      to add .accessoryCircular, .accessoryRectangular.
- *   2. Add body branches in MeteoblickView for the new families.
+ *   3. Add body branches in MeteoblickView for the new families.
  *      Use the SAME `WidgetSnapshot`; only the layout differs.
- *   3. widgetManager.ts: NO changes (snapshot is family-agnostic).
- *   4. Tests: existing smoke test still mounts the screen.
+ *   4. widgetManager.ts: NO changes (snapshot is family-agnostic).
+ *   5. Add UI in app: Lock Screen section in LoxoneConfigScreen or
+ *      a new "Widget" section for picking the circular metric.
+ *   6. Tests: existing smoke test still mounts the screen.
  *
  * OUT OF SCOPE
  *   - Lock Screen widget interactivity (Apple policy)
