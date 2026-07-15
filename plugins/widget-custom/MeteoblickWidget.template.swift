@@ -402,12 +402,13 @@ struct MeteoblickView: View {
             }
             .frame(maxWidth: .infinity, alignment: .center)
 
-            // Phase 4a: up to 2 Loxone sensors stacked vertically
+            // Phase 5+: up to 2 Loxone sensors (158pt is tight).
+            // 16pt padding + body-size font for HIG readability.
             ForEach(Array(s.smartHomeSensors?.prefix(2) ?? []), id: \.uuid) { sensor in
-                SensorRowCompact(sensor: sensor, fontSize: 14, nameFontSize: 9)
+                SensorRowCompact(sensor: sensor, fontSize: 17, nameFontSize: 11)
             }
         }
-        .padding(6)
+        .padding(0)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
@@ -416,95 +417,75 @@ struct MeteoblickView: View {
         VStack(alignment: .leading, spacing: 2) {
             // Location name — left-aligned
             Text(s.locationName)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(.white)
                 .lineLimit(1)
 
             // Weather emoji + temperature — left-aligned, directly below
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(s.weatherSymbol)
-                    .font(.system(size: 22))
+                    .font(.system(size: 24))
                 Text(s.temperatureActual)
-                    .font(.system(size: 32, weight: .bold))
+                    .font(.system(size: 34, weight: .bold))
                     .foregroundColor(.white)
                 Text(s.temperatureUnit)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: 17, weight: .medium))
                     .foregroundColor(.white)
             }
 
             Spacer(minLength: 0)
 
-            // Phase 4a: up to 2 Loxone sensors side-by-side
-            let sensors = Array(s.smartHomeSensors?.prefix(2) ?? [])
-            if !sensors.isEmpty {
-                HStack(spacing: 8) {
+            // Phase 5+: 2x2 grid for up to 4 Loxone sensors in the
+            // lower half of the medium widget. Top-left + top-right
+            // (row 1), bottom-left + bottom-right (row 2). Each cell
+            // shows the sensor name + temperature. Compact font
+            // (15pt temp / 9pt name) fits the 338x158 layout.
+            let sensors = Array(s.smartHomeSensors?.prefix(4) ?? [])
+            if sensors.count >= 2 {
+                let columns = [
+                    GridItem(.flexible(), spacing: 4),
+                    GridItem(.flexible(), spacing: 4),
+                ]
+                LazyVGrid(columns: columns, spacing: 4) {
                     ForEach(sensors, id: \.uuid) { sensor in
-                        SensorRowCompact(sensor: sensor, fontSize: 16, nameFontSize: 10)
-                            .frame(maxWidth: .infinity)
+                        SensorRowCompact(sensor: sensor, fontSize: 18, nameFontSize: 9)
                     }
                 }
-            }
-
-            // Precipitation (shown if > 0)
-            if Double(s.precipitation) ?? 0 > 0 {
-                HStack(spacing: 4) {
-                    Text(s.precipitationLabel)
-                        .font(.system(size: 10))
-                    Text("\(s.precipitation) \(s.precipitationUnit)")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.white)
-                }
-            }
-
-            // Footer: timestamps + build
-            HStack(spacing: 6) {
-                if !s.timestampActual.isEmpty {
-                    Text("📊 \(s.timestampActual)")
-                        .font(.system(size: 8))
-                        .foregroundColor(.white.opacity(0.7))
-                }
-                if !s.refreshedAt.isEmpty {
-                    Text("🔄 \(s.refreshedAt)")
-                        .font(.system(size: 8))
-                        .foregroundColor(.white.opacity(0.7))
-                }
-                Spacer()
-                Text("Build \(s.buildNumber)")
-                    .font(.system(size: 8))
-                    .foregroundColor(.white.opacity(0.7))
+            } else if sensors.count == 1 {
+                SensorRowCompact(sensor: sensors[0], fontSize: 18, nameFontSize: 12)
             }
         }
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    /// Phase 4a: large widget — 3×2 grid of up to 6 Loxone sensors
+    /// Phase 5+: large widget — 3×2 grid of up to 6 Loxone sensors
     @ViewBuilder
     private func largeBody(s: WidgetSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(s.locationName)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(.white)
                     .lineLimit(1)
                 Spacer()
                 Text(s.weatherSymbol)
-                    .font(.system(size: 22))
+                    .font(.system(size: 24))
             }
 
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(s.weatherSymbol)
-                    .font(.system(size: 18))
+                    .font(.system(size: 20))
                 Text(s.temperatureActual)
-                    .font(.system(size: 28, weight: .bold))
+                    .font(.system(size: 32, weight: .bold))
                     .foregroundColor(.white)
                 Text(s.temperatureUnit)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: 16, weight: .medium))
                     .foregroundColor(.white)
                 if Double(s.precipitation) ?? 0 > 0 {
                     Spacer()
                     Text("\(s.precipitationLabel) \(s.precipitation) \(s.precipitationUnit)")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundColor(.white.opacity(0.9))
                 }
             }
@@ -557,15 +538,15 @@ struct SensorCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(sensor.name)
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(size: 12, weight: .medium))
                 .foregroundColor(.white.opacity(0.85))
                 .lineLimit(1)
             Text(sensor.temperature + "°")
-                .font(.system(size: 18, weight: .semibold))
+                .font(.system(size: 22, weight: .semibold))
                 .foregroundColor(.white)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(6)
+        .padding(8)
         .background(
             RoundedRectangle(cornerRadius: 6)
                 .fill(Color.white.opacity(0.12))
