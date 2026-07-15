@@ -72,6 +72,12 @@ These pre-date the backlog; revisit when picking up the related work.
   backend integration. Probably needs backend first.
 - **Per-widget-family sensor selection** — current MVP uses one global order
   capped by family size. Users might want different sensors in small vs large.
+- **Map weather symbols to actual weather conditions** — the widget
+  currently uses the same emoji string passed by the JS snapshot. Map
+  it to a richer set of conditions (e.g. clear / partly cloudy / rain /
+  snow / thunderstorm) so the widget reflects actual weather, not just
+  the snapshot emoji. Use the symbolCode / temp / precipitation
+  already in the snapshot to pick the right emoji.
 
 ## Done (recent shipped work)
 
