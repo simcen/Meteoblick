@@ -15,6 +15,9 @@ struct WidgetConfig: Codable {
     let showInWidgetSensorUuids: [String]?
     let poiId: String?
     let apiBaseUrl: String?
+    // Phase 5+: 'weather' (default) or a sensor UUID. Controls what
+    // the circular Lock Screen widget shows.
+    let lockScreenCircular: String?
 }
 
 enum WidgetConfigStore {
@@ -368,11 +371,17 @@ struct MeteoblickView: View {
         let s = entry.snapshot
         let isSmall = family == .systemSmall
         let isLarge = family == .systemLarge || family == .systemExtraLarge
+        let isCircular = family == .accessoryCircular
+        let isRectangular = family == .accessoryRectangular
 
         if isSmall {
             smallBody(s: s)
         } else if isLarge {
             largeBody(s: s)
+        } else if isCircular {
+            circularBody(s: s)
+        } else if isRectangular {
+            rectangularBody(s: s)
         } else {
             mediumBody(s: s)
         }
@@ -504,6 +513,74 @@ struct MeteoblickView: View {
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
+
+    /// Phase 5+: Lock Screen circular widget — weather OR one Smart Home
+    /// sensor. Per-user config (lockScreenCircular in WidgetConfig).
+    @ViewBuilder
+    private func circularBody(s: WidgetSnapshot) -> some View {
+        let cfg = WidgetConfigStore.read()
+        let choice = cfg?.lockScreenCircular ?? "weather"
+        if choice == "weather" {
+            // Weather: emoji + temperature stacked.
+            VStack(spacing: 0) {
+                Text(s.weatherSymbol)
+                    .font(.system(size: 18))
+                Text(s.temperatureActual)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+            }
+            .padding(2)
+        } else {
+            // Single sensor: name + temperature.
+            let sensor = s.smartHomeSensors?.first(where: { $0.uuid == choice })
+            VStack(spacing: 0) {
+                Text(sensor?.name ?? "🏠")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.white.opacity(0.85))
+                    .lineLimit(1)
+                Text((sensor?.temperature ?? "--") + "°")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+            }
+            .padding(2)
+        }
+    }
+
+    /// Phase 5+: Lock Screen rectangular widget — weather + top-N sensors
+    /// (max 2 for readability on Lock Screen).
+    @ViewBuilder
+    private func rectangularBody(s: WidgetSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            // Weather line
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(s.weatherSymbol)
+                    .font(.system(size: 14))
+                Text(s.temperatureActual + s.temperatureUnit)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
+            }
+
+            // Up to 2 sensors
+            ForEach(Array(s.smartHomeSensors?.prefix(2) ?? []), id: \.uuid) { sensor in
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(sensor.name)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white.opacity(0.85))
+                        .lineLimit(1)
+                    Spacer()
+                    Text(sensor.temperature + "°")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+            }
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
 }
 
 // MARK: - Sensor views (Phase 4a)
@@ -529,6 +606,7 @@ struct SensorRowCompact: View {
             Spacer(minLength: 0)
         }
     }
+
 }
 
 /// Card-style sensor for the 3×2 large-widget grid.
@@ -575,6 +653,11 @@ struct MeteoblickWidget: Widget {
         }
         .configurationDisplayName("Meteoblick")
         .description("Wetter für deinen Standort")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies([
+            .systemSmall,
+            .systemMedium,
+            .accessoryCircular,
+            .accessoryRectangular,
+        ])
     }
 }

@@ -9,7 +9,7 @@
  * Phase 2.1: multi-sensor rows with reorder + flags + delete (no add/rename yet —
  * those land in Phase 2.2 / 2.3).
  */
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -58,6 +58,10 @@ export default function LoxoneConfigScreen() {
   // Here we just show a summary card with the SNR + chevron to navigate.
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
+  // Phase 5+: Lock Screen circular widget metric — 'weather' (default)
+  // or a sensor UUID. Persisted in SharedStorage on every change.
+  const [lockScreenCircular, setLockScreenCircular] = useState<string>('weather');
+
   const styles = useMemo(
     () =>
       StyleSheet.create({
@@ -99,6 +103,45 @@ export default function LoxoneConfigScreen() {
           paddingVertical: Spacing.sm,
         },
         sectionTitle: { ...Typography.headline, color: colors.label.primary, marginBottom: Spacing.md },
+        // Phase 5+: Lock Screen widget config card
+        lockRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingVertical: Spacing.sm,
+        },
+        lockRowMain: { flex: 1 },
+        lockLabel: {
+          ...Typography.body,
+          color: colors.label.secondary,
+        },
+        lockValueInline: {
+          ...Typography.body,
+          color: colors.label.primary,
+          textAlign: 'right',
+        },
+        lockPickerRow: {
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          marginTop: Spacing.sm,
+          marginHorizontal: -4,
+        },
+        lockChip: {
+          paddingHorizontal: Spacing.md,
+          paddingVertical: Spacing.xs,
+          borderRadius: 14,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: colors.separator.opaque,
+          margin: 4,
+        },
+        lockChipActive: {
+          backgroundColor: colors.tint + '22',
+          borderColor: colors.tint,
+        },
+        lockChipText: {
+          ...Typography.caption1,
+          color: colors.label.primary,
+          fontWeight: '500',
+        },
         toggleRow: {
           flexDirection: 'row',
           justifyContent: 'space-between',
@@ -282,9 +325,19 @@ export default function LoxoneConfigScreen() {
       setEnabled(config.enabled);
       setCloudAddress(config.cloudAddress);
       setSensors(config.sensors);
+      setLockScreenCircular(config.lockScreenCircular ?? 'weather');
     }
     setHasLoadedOnce(true);
   };
+
+  // Persist the Lock Screen circular config immediately (sensor ops
+  // already do this kind of write; same pattern).
+  const setLockScreenCircularAndPersist = useCallback(async (next: string) => {
+    setLockScreenCircular(next);
+    const config = await SharedStorage.getLoxoneConfig();
+    if (!config) return;
+    await SharedStorage.setLoxoneConfig({ ...config, lockScreenCircular: next });
+  }, []);
 
   // ─── Master toggle: persist enabled immediately (sensors persist
   //    via granular ops from the row UI) ─────────────────────────
@@ -514,6 +567,53 @@ export default function LoxoneConfigScreen() {
           >
             <Text style={styles.addButtonText}>+ Sensor hinzufügen</Text>
           </TouchableOpacity>
+        </View>
+
+        {/* Phase 5+: Lock Screen widget — circular metric picker. */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Widget (Lock Screen)</Text>
+          <View style={styles.lockRow}>
+            <View style={styles.lockRowMain}>
+              <Text style={styles.lockLabel}>Circular</Text>
+              <Text style={styles.lockValueInline}>
+                {lockScreenCircular === 'weather'
+                  ? 'Wetter'
+                  : sensors.find((s) => s.uuid === lockScreenCircular)?.name ?? 'Sensor'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.lockPickerRow}>
+            <TouchableOpacity
+              onPress={() => setLockScreenCircularAndPersist('weather')}
+              style={[
+                styles.lockChip,
+                lockScreenCircular === 'weather' && styles.lockChipActive,
+              ]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: lockScreenCircular === 'weather' }}
+            >
+              <Text style={styles.lockChipText}>Wetter</Text>
+            </TouchableOpacity>
+            {sensors
+              .filter((s) => s.showInWidget)
+              .map((s) => (
+                <TouchableOpacity
+                  key={s.uuid}
+                  onPress={() => setLockScreenCircularAndPersist(s.uuid)}
+                  style={[
+                    styles.lockChip,
+                    lockScreenCircular === s.uuid && styles.lockChipActive,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: lockScreenCircular === s.uuid }}
+                >
+                  <Text style={styles.lockChipText} numberOfLines={1}>
+                    {s.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+          </View>
         </View>
 
         {hasLoadedOnce && (

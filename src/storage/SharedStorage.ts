@@ -46,6 +46,10 @@ export type LoxoneConfig = {
   password: string;
   sensors: Sensor[];
   enabled: boolean;
+  // Phase 5+: per-user Lock Screen widget config.
+  // 'weather' (default) shows MeteoSwiss in the circular Lock Screen
+  // widget. A sensor UUID shows that specific sensor instead.
+  lockScreenCircular?: string;
 };
 
 // Legacy shape (kept only for migration detection).
@@ -257,6 +261,10 @@ async setLoxoneConfig(config: LoxoneConfig): Promise<void> {
         // Empty string signals "not configured" → widget keeps cached snapshot.
         poiId,
         apiBaseUrl,
+        // Phase 5+: per-user Lock Screen widget config.
+        // 'weather' (default) shows MeteoSwiss; a sensor UUID shows that
+        // specific sensor. The widget picks the right value at render time.
+        lockScreenCircular: config.lockScreenCircular ?? 'weather',
       };
       await SharedGroupPreferences.setItem(
         WIDGET_LOXONE_CONFIG_KEY,
