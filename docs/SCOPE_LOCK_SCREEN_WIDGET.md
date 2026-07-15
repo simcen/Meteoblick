@@ -1,94 +1,114 @@
 /**
- * Scope — iOS 16+ Lock Screen widget (Phase 2 of "Home Screen Widget" /
- * "Lock Screen Widget" backlog items).
+ * Scope — iOS 16+ Lock Screen widget (PM/PO spec).
  *
- * CURRENT STATE:
+ * This is the canonical scope doc for adding Lock Screen + Always-On
+ * Display widget support to the existing MeteoblickWidget extension.
+ * Read this top-to-bottom; the decisions (D1–D6) below have defaults
+ * already chosen. Push back at any of them before implementation.
+ *
+ * PROBLEM (PM/PO framing)
+ *   The user (you) opens the iPhone dozens of times a day. The first
+ *   question on the Lock Screen is "what's the temperature?". Today
+ *   the answer requires: pick up phone, glance at Lock Screen (no info),
+ *   unlock, open Meteoblick app, wait for fetch, scroll. ~6 seconds
+ *   of friction.
+ *
+ *   A Lock Screen widget removes the entire chain. Glanceable weather
+ *   in <1 second, no unlock. iOS 16+ accessory widgets are purpose-built
+ *   for this (iPhone 14 Pro+ AOD also shows them dimmed).
+ *
+ * TARGET USERS
+ *   - The user (you) — single primary user of the app. Family might
+ *     inherit the widget if they glance at your phone, but you are
+ *     the audience.
+ *   - Anyone with iOS 16+ and an iPhone 14 Pro+ for AOD.
+ *
+ * CURRENT STATE
  *   MeteoblickWidget extension supports only:
- *     .systemSmall
- *     .systemMedium
- *     .systemLarge
- *   iOS 16+ Lock Screen families (always-on display on iPhone 14 Pro+,
- *   Lock Screen widgets on all iOS 16+) are not supported.
+ *     .systemSmall    (158×158pt)
+ *     .systemMedium   (338×158pt)
+ *     .systemLarge    (338×354pt)
+ *   iOS 16+ accessory families (Lock Screen + AOD) are NOT supported.
+ *   backend `/api/widget/timeline` already returns all needed data
+ *   (location, weather, multi-sensor) — no backend changes needed.
  *
- * PAIN POINTS:
- *   - User opens phone → wants to check outdoor temp without unlocking
- *   - Today: must unlock phone → open Meteoblick app → wait for fetch
- *   - Lock Screen widget solves this: glanceable temp at a glance
+ * PROPOSED FAMILIES (D1, D2 — locked)
+ *   We add 2 Lock Screen families; 3rd (inline) is deferred.
  *
- * PROPOSED UX:
- *   Add iOS 16+ accessory family widgets to the existing extension:
- *     .accessoryCircular — small circular widget (Lock Screen + AOD)
- *     .accessoryRectangular — wider rectangle (Lock Screen)
- *     .accessoryInline — single line of text below the time on Lock Screen
+ *   ┌─────────────────────────┐
+ *   │ accessoryCircular       │  ~76pt square
+ *   │      ┌─────┐             │
+ *   │      │ 22° │             │  Primary temperature.
+ *   │      └─────┘             │  iOS draws the AOD dimmed version
+ *   └─────────────────────────┘  on iPhone 14 Pro+.
  *
- *   Content (proposed):
- *     accessoryCircular:    22.5°
- *     accessoryRectangular:  Meteoblick · 22.5° / 18°
- *     accessoryInline:      Meteoblick 22.5°
+ *   ┌─────────────────────────────────────────┐
+ *   │ accessoryRectangular (max 4 lines)         │  ~160pt × ~76pt+
+ *   │ 22.5° ☀  Aussen                          │
+ *   │ 18.0° 🏠  Pool                           │  Up to 2 primary sensor
+ *   │ 16.5° 🏠  Heizung                        │  values + weather.
+ *   └─────────────────────────────────────────┘
  *
- *   NO buttons, NO scrolling, NO interactivity in accessory widgets
- *   (Apple's policy). Display only.
+ * CONTENT (D3 — locked)
+ *   accessoryCircular  : 1 line: weather emoji + temperature
+ *   accessoryRectangular: up to 4 lines: weather + top-N sensors
+ *                          by showInWidget order (max 2 lines for
+ *                          readability on Lock Screen)
  *
- * LAYOUT (in iOS):
+ *   NO buttons, NO scrolling, NO interactivity — Apple's accessory
+ *   widget policy. Display-only.
  *
- *   ┌─────────────────────┐
- *   │      Lock Screen      │  ← iPhone Lock Screen
- *   │  ┌────┐                │
- *   │  │ 22°│  Friday 22 May  │
- *   │  └────┘                │
- *   │  Meteoblick 18°         │  ← inline above the date
- *   └─────────────────────┘
+ * DATA SOURCE (D4 — locked)
+ *   Same `MeteoblickWidgetSnapshot` already written by the host app
+ *   to the App Group. No new snapshot type, no new fetch path. The
+ *   widget just branches on `widgetFamily` like it already does for
+ *   systemSmall/systemMedium/systemLarge.
  *
- * DECISIONS TO MAKE:
- *   D1. Which Lock Screen families to support?
- *       a) rectangular + inline (most common, more info)
- *       b) rectangular + circular (more glanceable but less info)
- *       c) all three (maximum coverage, more code)
- *       → Default: rectangular + inline (most useful for weather info;
- *         circular is borderline redundant with the small home widget)
- *   D2. Content source: same shared MeteoblickWidget snapshot, OR
- *       a separate dedicated Lock Screen snapshot?
- *       → Default: same snapshot. Less data duplication. The widget
- *         extension already reads the App Group; the same
- *         WidgetSnapshot covers all families.
- *   D3. Always-On Display support? (iPhone 14 Pro+)
- *       a) Yes — AOD widget is always-on, dim background
- *       b) No — disable widgets in AOD
- *       → Default: yes. iOS handles the dim automatically; we just
- *         provide the widget, Apple handles the rest.
- *   D4. Refresh cadence: same as current (15-min timeline)?
- *       → Default: yes. iOS controls widget refresh rate; we just
- *         respond to reloadTimeline().
- *   D5. Use the same MeteoblickWidget extension, or create a new
- *       target?
- *       → Default: same extension. One target, multiple families
- *         (small/medium/large/circular/rectangular/inline). One
- *         WidgetSnapshot, multiple views.
+ * ALWAYS-ON DISPLAY (D5 — locked)
+ *   Yes, we support AOD. iOS automatically dims the widget when the
+ *   screen is locked / in AOD. We provide the same widget content;
+ *   iOS handles the visual treatment. No code change needed.
  *
- * RISKS:
- *   - iOS shows only ONE widget per slot. Users can choose which
- *     family to use. We should provide all useful ones.
- *   - Lock Screen widget changes require Xcode rebuild + reload.
- *     The .pbxproj auto-discovery should pick up new families.
- *   - Swift code needs to handle the new `widgetFamily` cases in
- *     `body`. Adds 3 more branches to the existing switch.
- *   - widgetManager.ts sends the same snapshot regardless of
- *     family; no JS changes needed for the Lock Screen widget.
+ * NEW EXTENSION? (D6 — locked)
+ *   No, we add the new families to the EXISTING `MeteoblickWidget`
+ *   extension. One target, multiple families, one `WidgetSnapshot`.
+ *   Matches the existing pattern.
  *
- * PHASING:
+ * REFRESH CADENCE
+ *   Same as today: 15-min timeline. iOS controls the actual cadence.
+ *   The host app's BG-fetch + the widget's own timeline refresh keep
+ *   the data current; Lock Screen widget just reads the latest snapshot.
+ *
+ * OPEN QUESTIONS (none — all D1–D6 locked)
+ *
+ * RISKS
+ *   - Multi-sensor cramping: 4 sensor lines in a 76pt-tall rectangular
+ *     widget is too tight. Limit to 2 sensors + weather in rectangular.
+ *   - WatchOS / macOS widgets: out of scope (separate backlog if needed).
+ *   - Inline widget (single line above date): deferred — minimal value
+ *     for a single info line. Re-evaluate if users want a "glance"
+ *     mode later.
+ *
+ * PHASING
  *   1. Update WidgetConfigurable.supportedFamilies in widget Swift
- *      to add .accessoryRectangular, .accessoryInline (and maybe
- *      .accessoryCircular)
- *   2. Add body branches in MeteoblickView for the new families
- *   3. Tests: smoke test (already covers mount, no changes needed)
- *   4. Optional: backend schema unchanged (single payload serves
- *      all families)
+ *      to add .accessoryCircular, .accessoryRectangular.
+ *   2. Add body branches in MeteoblickView for the new families.
+ *      Use the SAME `WidgetSnapshot`; only the layout differs.
+ *   3. widgetManager.ts: NO changes (snapshot is family-agnostic).
+ *   4. Tests: existing smoke test still mounts the screen.
  *
- * OUT OF SCOPE:
- *   - Widget interactivity (iOS policy: Lock Screen widgets can't
- *     have buttons or taps)
+ * OUT OF SCOPE
+ *   - Lock Screen widget interactivity (Apple policy)
+ *   - WatchOS / macOS / Android widgets
  *   - Standalone Lock Screen extension target
- *   - WatchOS / WearOS / Mac widgets
- *   - Home Screen widget variants (separate scope, already in
- *     BACKLOG as "Home Screen Widget")
+ *   - Inline widget family (deferred)
+ *
+ * DECISIONS (FINAL)
+ *   D1. Lock Screen families: RECTANGULAR + CIRCULAR.
+ *   D2. Inline deferred.
+ *   D3. Rectangular content: weather + up to 2 sensors by showInWidget
+ *       order. Circular: weather + temp only.
+ *   D4. Data source: same `MeteoblickWidgetSnapshot`.
+ *   D5. AOD: yes, supported.
+ *   D6. Same extension target.
  */
