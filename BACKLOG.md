@@ -24,6 +24,26 @@ values: `open` / `exploring` / `in-progress` / `done` / `reverted`.
   - iOS widget families currently supported: `systemSmall`, `systemMedium`, `systemLarge`. Could add `systemExtraLarge` (iPad) or accessory widgets (`accessoryCircular`, `accessoryRectangular`, `accessoryInline` for Lock Screen).
 - Decision needed before implementation.
 
+### Apple Watch Widget / Compilation
+- Status: open — needs scoping
+- Notes:
+  - WatchOS widget (WidgetKit) companion to the iOS widget. Show the
+    current outdoor temperature + key sensor at-a-glance on the
+    watch face / Smart Stack.
+  - Architecture question: separate target, or shared target? Shared
+    (single Swift package, two extension entry points) is simpler but
+    Watch widgets have stricter memory/CPU budgets.
+  - WatchOS 10+ uses the same WidgetKit + SwiftUI as iOS. Same payload
+    source (App Group) — no new backend work needed if the existing
+    /api/widget/timeline already returns the data we want to display.
+  - Open questions:
+    1. Which watch faces / complications are in scope
+       (modular, accessory circular, Smart Stack, etc.)?
+    2. Is the same multi-instance AppIntent model desired, or a
+       single watch widget with a fixed metric?
+    3. Refresh cadence on watch (more frequent than iOS?).
+- Decision needed before implementation.
+
 ### Multi-Sensor Smart Home Support
 - Status: **shipped** (Phases 1-4 + polish). Storage + migration + granular ops
   + multi-sensor UI (drag handle, flags, rename, delete, picker). SmartHomeScreen
