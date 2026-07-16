@@ -1,8 +1,22 @@
 /**
- * Scope — Multi-instance Lock Screen widget via iOS 17+ AppIntent
- * (supersedes the per-user `lockScreenCircular` config).
+ * Scope — Multi-instance widget for iOS 17+ via AppIntent, with
+ * Apple Watch / complications as a future extension of the same
+ * principle (supersedes the per-user `lockScreenCircular` config).
  *
- * PROBLEM (PM/PO framing)
+ * SCOPE CLARIFICATION (PM/PO framing)
+ *   "Multi-instance widget" means: the SAME widget code can be added
+ *   multiple times to the iOS Lock Screen / Home Screen, each instance
+ *   configured independently (different metric). This is iOS's standard
+ *   pattern for any widget with user choice (Weather, Music, etc.).
+ *
+ *   Apply to ALL widget families we support:
+ *     - iOS Lock Screen: accessoryCircular, accessoryRectangular
+ *     - iOS Home Screen: systemSmall, systemMedium, systemLarge
+ *     - Apple Watch (future): same pattern, different extension target
+ *
+ *   This is one AppIntent shared across all Meteoblick widget code paths.
+ *
+ * PROBLEM
  *   The previous approach (one widget, one per-user config in the app)
  *   forces the user to choose between "Wetter" OR "Pool" OR "Heizung"
  *   — only one value at a time. With multi-instance widgets (iOS 17+),
@@ -23,8 +37,16 @@
  *   │  Wetter   Pool           │
  *   └─────────────────────────┘
  *
- *   One widget code path, two or more iOS Lock-Screen slots. Each
- *   instance carries its own `metric` parameter (AppIntent).
+ *   ┌────────────────────────────────┐
+ *   │ iOS Home Screen                │
+ *   │  ┌──────┐  ┌──────┐            │
+ *   │  │  22° │  │ 24° │  ← Multiple Meteoblick instances,
+ *   │  └──────┘  └──────┘    each with a chosen metric
+ *   │  Wetter    Pool               │
+ *   └────────────────────────────────┘
+ *
+ *   One widget code path, multiple iOS slots. Each instance carries
+ *   its own `metric` parameter (AppIntent).
  *
  *   ┌──────────────────────────────────┐
  *   │ Meteoblick — Wetter    ›         │  ← iOS widget gallery config
@@ -37,14 +59,21 @@
  *   value. The app provides `WidgetConfig` as a fallback (iOS 16 + the
  *   case where AppIntent is unavailable).
  *
+ *   iOS 17+ Apple Watch / complications (future, out of scope this PR):
+ *   same AppIntent type is shared. The extension target differs
+ *   (WatchOS app), but the Swift code path is the same one widget
+ *   class — the only delta is the bundle identifier and deployment
+ *   target. Document the pattern in `docs/EXPO_WIDGETS_ARCHITECTURE.md`
+ *   so the Watch extension can be added without re-architecting.
+ *
  * PROPOSED STATE FLOW
- *   1. User adds Meteoblick widget to Lock Screen
+ *   1. User adds Meteoblick widget to Lock Screen or Home Screen
  *   2. iOS shows configuration sheet (iOS 17+ only):
  *      - Wetter (default)
  *      - Pool, Aussen, Heizung, ... (one option per showInWidget sensor)
- *   3. User picks "Pool", widget shows Pool temperature
- *   4. User adds second Meteoblick widget, picks "Wetter"
- *   5. Lock Screen now shows both
+ *   3. User picks "Pool", widget shows Pool value
+ *   4. User adds a second Meteoblick widget, picks "Wetter"
+ *   5. Both instances coexist with their own choice
  *
  *   iOS 16: configuration sheet not shown. Widget reads `WidgetConfig`
  *   from App Group (the per-user `lockScreenCircular` setting we
@@ -52,7 +81,8 @@
  *
  * DECISIONS
  *   D1. AppIntent type: enum with cases `.weather` and
- *       `.sensor(uuid: String)`. Single enum, no nested types.
+ *       `.sensor(uuid: String)`. Single enum, reused across all
+ *       widget families (Lock + Home + future Watch).
  *   D2. iOS 16 fallback: keep the current in-app `lockScreenCircular`
  *       config. When AppIntent is unavailable, widget reads
  *       `WidgetConfig.lockScreenCircular`. Both paths share the same
@@ -66,17 +96,23 @@
  *       showing how to add the widget to Lock Screen.
  *   D6. Single widget code path handles both: AppIntent (iOS 17+) and
  *       WidgetConfig fallback (iOS 16). No branching in the body.
+ *   D7. **Lock + Home + Watch share the same AppIntent type.** When
+ *       the Watch extension is added later, it imports the same
+ *       `WidgetConfigIntent` — no new Swift code for config.
  *
  * PHASING
  *   1. Add `WidgetConfigIntent` in Swift with `metric: Metric` parameter
- *   2. Refactor `circularBody` to read from `Configuration.metric`
- *      (or WidgetConfig fallback for iOS 16)
+ *   2. Refactor `body` + per-family body funcs to read from
+ *      `Configuration.metric` (iOS 17+) with WidgetConfig fallback
+ *      (iOS 16)
  *   3. Wire `AppIntentConfiguration(intent: WidgetConfigIntent.self)`
  *      into the widget definition
  *   4. Remove the in-app `lockScreenCircular` picker from
  *      LoxoneConfigScreen
  *   5. Add a hint to Home-Screen / LoxoneConfigScreen with iOS
- *      instructions
+ *      widget-add instructions
+ *   6. Document the "Lock + Home + future Watch share one AppIntent"
+ *      pattern in docs/EXPO_WIDGETS_ARCHITECTURE.md
  *
  * OPEN QUESTIONS
  *   - iOS 17 minimum: project currently targets iOS 26 (we have
@@ -85,12 +121,19 @@
  *   - Configuration UI locale: keep in English (Apple standard for
  *     widget config sheets). Sensors can have German display names
  *     via `displayRepresentation`.
+ *   - When the Watch extension is added, does the iOS WidgetConfig
+ *     App Group name match the Watch's group ID? Yes — the bundle
+ *     groups are configured at install time; the Watch app reads
+ *     from the same `group.ch.meteoblick` as long as the Watch app
+ *     declares the entitlement.
  *
  * OUT OF SCOPE
  *   - Inline widget-edit (left-over from the per-user config model)
  *   - Sync between iOS 17+ AppIntent config and iOS 16 fallback
  *     (no shared state — iOS stores the AppIntent params, app stores
  *     the WidgetConfig; each path works independently)
+ *   - Apple Watch / complications implementation (deferred, but
+ *     the AppIntent pattern is the foundation for it)
  *   - Multi-metric widget (still one value per instance, even if
  *     Lock Screen has 3 Meteoblick widgets)
  */
