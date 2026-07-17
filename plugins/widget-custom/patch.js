@@ -40,21 +40,21 @@ for (const { template, target } of FILES) {
     console.error(`✗ Template not found: ${templatePath}`);
     process.exit(1);
   }
-  if (!fs.existsSync(targetPath)) {
-    console.error(`✗ Target not found: ${targetPath} — did you run 'expo prebuild' first?`);
-    process.exit(1);
-  }
 
   const source = fs.readFileSync(templatePath, 'utf8');
-  const existing = fs.readFileSync(targetPath, 'utf8');
+  const existing = fs.existsSync(targetPath) ? fs.readFileSync(targetPath, 'utf8') : null;
 
   if (existing === source) {
     console.log(`✓ ${target} is up to date`);
     continue;
   }
 
+  // Create parent dir if missing (expo prebuild may wipe ios/ entirely).
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
   fs.writeFileSync(targetPath, source);
-  console.log(
-    `✓ Patched ${target} (${existing.length} → ${source.length} bytes)`,
-  );
+  if (existing == null) {
+    console.log(`✓ Created ${target} (${source.length} bytes)`);
+  } else {
+    console.log(`✓ Patched ${target} (${existing.length} → ${source.length} bytes)`);
+  }
 }
