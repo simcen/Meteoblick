@@ -60,6 +60,11 @@ export async function fetchPOIsFromMeteoSwiss(): Promise<POI[]> {
       if (!pointId || !pointName || isNaN(lat) || isNaN(lon)) {
         continue;
       }
+      // weather.point_id is VarChar(10). Skip IDs longer than 10 chars —
+      // they would fail the weather FK and abort the whole sync.
+      if (pointId.length > 10) {
+        continue;
+      }
 
       pois.push({
         point_id: pointId,
