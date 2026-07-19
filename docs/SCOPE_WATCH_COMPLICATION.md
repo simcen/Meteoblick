@@ -63,24 +63,30 @@
  *   shows in the watch face editor.
  *
  * DECISIONS
- *   D1. Configuration model: AppIntent (iOS 17+/watchOS 10+). Each
- *       complication instance picks its own metric in iOS / watchOS
- *       config UI. Falls back to the app-level `WidgetConfig` for
- *       iOS 16 / watchOS 9.
+ *   D1. Configuration model: **iPhone in-app picker**
+ *       (LoxoneConfigScreen Lock-Screen section). User picks Wetter
+ *       or a sensor once, the iOS app writes the choice to the App
+ *       Group, and the Watch reads the same value. **NO AppIntent** —
+ *       single value for the whole Watch (per Apple HIG — one value,
+ *       one Complication).
  *   D2. Complication families: support `accessoryCircular` and
  *       `accessoryRectangular`. Skip `accessoryInline` (Lock Screen
  *       only) and `accessoryCorner` (rare, Apple Watch face corner).
  *   D3. Watch target: separate Xcode target. Share Swift source via
  *       a shared file (`MeteoblickWidget.swift` reused, conditional
  *       `#if canImport(WidgetKit)` for the widget classes, etc.).
- *   D4. Background refresh: respect watchOS 12 budget. Update only on
- *       app foreground (host app writes to App Group) — no
- *       `WKApplicationRefreshBackgroundTask` needed. The complication
- *       reads the App Group snapshot like the Lock Screen widget.
- *   D5. Same `WidgetConfigIntent` as iOS. One Swift intent, reused.
- *   D6. Add `WidgetConfig.lockScreenCircular` is irrelevant here
- *       — watchOS always reads the AppIntent config. App Group
- *       fallback is only for old watches (watchOS 9).
+ *   D4. Background refresh: **same as Lock Screen widget** — iOS
+ *      app runs `weatherBackgroundTask` (BG-fetch) every ~15 min, fetches
+ *      MeteoSwiss + Loxone via `/api/widget/timeline`, writes snapshot
+ *      to App Group. The Watch reads the same App Group. The iOS-side
+ *      BG fetch is what keeps both the Lock Screen widget AND the
+ *      Watch complication current — **no watchOS-side background fetch
+ *      needed**. Same principle as Lock Screen + normal widget.
+ *   D5. Reuse the existing iPhone picker (LoxoneConfigScreen). Both
+ *      the iOS Lock Screen widget and the Watch complication read
+ *      `WidgetConfig.lockScreenCircular` from the App Group.
+ *   D6. Bundle ID: `ch.meteoblick.watchapp` (sibling of the iOS
+ *      app's `ch.meteoblick`, no separate Watch app listing).
  *
  * PHASING
  *   1. Add watchOS target to Xcode (MeteoblickWatch) with
