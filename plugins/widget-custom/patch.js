@@ -1,60 +1,43 @@
 #!/usr/bin/env node
 /**
- * Meteoblick Patch Script
+ * Meteoblick Widget Swift Patch Script
  *
- * Restores files that `expo prebuild` overwrites (or removes) but
- * that live in `ios/` (which is gitignored, so the repo can't store
- * them). Runs as a `postprebuild` hook in package.json.
- *
- * Restored files:
- *   - ios/ExpoWidgetsTarget/MeteoblickWidget.swift
- *       → plugins/widget-custom/MeteoblickWidget.template.swift
- *   - ios/ExportOptions.plist
- *       → plugins/widget-custom/ExportOptions.plist
+ * The expo-widgets plugin overwrites ios/ExpoWidgetsTarget/MeteoblickWidget.swift
+ * with a minimal template during `expo prebuild`. This script patches it
+ * back to our custom version (with Loxone auth + backend timeline fetch).
  *
  * Usage:
  *   node plugins/widget-custom/patch.js
- *   pnpm postprebuild   (or run `expo prebuild` which fires postprebuild)
+ *
+ * Or wire it up as a post-prebuild hook in package.json:
+ *   "scripts": { "postprebuild": "node plugins/widget-custom/patch.js" }
+ *
+ * Or run manually after `expo prebuild`:
+ *   expo prebuild && node plugins/widget-custom/patch.js
  */
 const fs = require('fs');
 const path = require('path');
 
-const FILES = [
-  {
-    template: 'MeteoblickWidget.template.swift',
-    target: 'ExpoWidgetsTarget/MeteoblickWidget.swift',
-  },
-  {
-    template: 'ExportOptions.plist',
-    target: 'ExportOptions.plist',
-  },
-];
+const TEMPLATE = path.join(__dirname, 'MeteoblickWidget.template.swift');
+const TARGET = path.join(__dirname, '..', '..', 'ios', 'ExpoWidgetsTarget', 'MeteoblickWidget.swift');
 
-const IOS_DIR = path.join(__dirname, '..', '..', 'ios');
-
-for (const { template, target } of FILES) {
-  const templatePath = path.join(__dirname, template);
-  const targetPath = path.join(IOS_DIR, target);
-
-  if (!fs.existsSync(templatePath)) {
-    console.error(`✗ Template not found: ${templatePath}`);
-    process.exit(1);
-  }
-
-  const source = fs.readFileSync(templatePath, 'utf8');
-  const existing = fs.existsSync(targetPath) ? fs.readFileSync(targetPath, 'utf8') : null;
-
-  if (existing === source) {
-    console.log(`✓ ${target} is up to date`);
-    continue;
-  }
-
-  // Create parent dir if missing (expo prebuild may wipe ios/ entirely).
-  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-  fs.writeFileSync(targetPath, source);
-  if (existing == null) {
-    console.log(`✓ Created ${target} (${source.length} bytes)`);
-  } else {
-    console.log(`✓ Patched ${target} (${existing.length} → ${source.length} bytes)`);
-  }
+if (!fs.existsSync(TEMPLATE)) {
+  console.error(`✗ Template not found: ${TEMPLATE}`);
+  process.exit(1);
 }
+
+if (!fs.existsSync(TARGET)) {
+  console.error(`✗ Target not found: ${TARGET} — did you run 'expo prebuild' first?`);
+  process.exit(1);
+}
+
+const source = fs.readFileSync(TEMPLATE, 'utf8');
+const existing = fs.readFileSync(TARGET, 'utf8');
+
+if (existing === source) {
+  console.log('✓ MeteoblickWidget.swift is up to date');
+  process.exit(0);
+}
+
+fs.writeFileSync(TARGET, source);
+console.log(`✓ Patched MeteoblickWidget.swift (${existing.length} → ${source.length} bytes)`);
