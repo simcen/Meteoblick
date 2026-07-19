@@ -72,6 +72,13 @@ These pre-date the backlog; revisit when picking up the related work.
   backend integration. Probably needs backend first.
 - **Per-widget-family sensor selection** — current MVP uses one global order
   capped by family size. Users might want different sensors in small vs large.
+- **Multi-instance Lock Screen widget** — iOS 17+ AppIntent config. Each
+  Meteoblick widget instance picks its own metric (Wetter | Pool | Aussen |
+  ...). iOS widget gallery handles config (no in-app picker). iOS 16
+  falls back to the current in-app `lockScreenCircular` setting. Adds
+  `WidgetConfigIntent` (AppIntent) + `MetricEntity` (AppEntity) to the
+  widget extension. Removes the in-app picker from LoxoneConfigScreen.
+  iOS 16 fallback path keeps `WidgetConfig.lockScreenCircular`.
 - **Map weather symbols to actual weather conditions** — the widget
   currently uses the same emoji string passed by the JS snapshot. Map
   it to a richer set of conditions (e.g. clear / partly cloudy / rain /
