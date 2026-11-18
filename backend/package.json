@@ -14,8 +14,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate deploy",
-    "heroku-postbuild": "prisma generate"
+    "prisma:migrate": "prisma migrate deploy"
   },
   "keywords": [
     "weather",

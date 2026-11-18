@@ -1,5 +1,23 @@
 # Loxone Smart Home Integration - Architektur & Implementierungsplan
 
+> **Stand November 2026:** Die Anbindung über die Loxone Cloud (Remote Connect,
+> Cloud DNS, Seriennummer) ist ersetzt. Loxone lässt Remote Connect nur noch für
+> die eigene App und Loxone Config zu. Aktuell gilt:
+>
+> - In der App werden **Adresse** (IP oder DNS-Name, optional mit Port) und
+>   **Protokoll** (HTTP/HTTPS) des Miniservers konfiguriert, dazu Benutzername
+>   und Passwort.
+> - Die App spricht nicht direkt mit dem Miniserver, sondern über den
+>   Backend-Proxy `/api/loxone/*`. Das Backend läuft im selben Netz wie der
+>   Miniserver und erreicht nur private Adressen (optional eingeschränkt über
+>   `LOXONE_ALLOWED_HOSTS`).
+> - Das Widget holt Sensorwerte über `/api/widget/timeline` mit dem Header
+>   `X-Loxone-BaseURL`.
+> - Authentifizierung: HTTP Basic Auth mit Benutzername und Passwort.
+>
+> Die folgenden Abschnitte zu Cloud DNS, Auto-Detection und Token-Auth
+> beschreiben den ursprünglichen Plan und sind nur noch historisch.
+
 ## Recherche-Ergebnisse
 
 ### API Dokumentation
