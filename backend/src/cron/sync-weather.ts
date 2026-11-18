@@ -14,7 +14,7 @@ export async function syncWeatherData() {
       try {
         await upsertPOI(poi);
       } catch (err) {
-        console.warn(`⚠️  Skipping POI "${poi.point_name}" (${poi.point_id}): ${err.message}`);
+        console.warn(`⚠️  Skipping POI "${poi.point_name}" (${poi.point_id}): ${(err as Error).message}`);
       }
     }
 
@@ -50,7 +50,7 @@ export async function syncWeatherData() {
         weatherSkipped++;
         if (weatherSkipped <= 3 || weatherSkipped % 100 === 0) {
           console.warn(
-            `⚠️  Skipping weather for ${weather.point_id}: ${err.message.split('\n')[0]}`,
+            `⚠️  Skipping weather for ${weather.point_id}: ${(err as Error).message.split('\n')[0]}`,
           );
         }
       }

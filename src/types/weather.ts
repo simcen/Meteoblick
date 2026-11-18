@@ -10,6 +10,6 @@ export interface WeatherData {
 }
 
 export interface WeatherError {
-  code: 'NETWORK_ERROR' | 'PARSE_ERROR' | 'INVALID_POI' | 'UNKNOWN';
+  code: 'invalid_poi' | 'api_error' | 'unknown_error';
   message: string;
 }

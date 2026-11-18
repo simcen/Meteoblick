@@ -6,6 +6,7 @@ import {
   frame,
   clipShape,
   containerBackground,
+  lineLimit,
 } from '@expo/ui/swift-ui/modifiers';
 import { createWidget, type WidgetEnvironment } from 'expo-widgets';
 
@@ -138,9 +139,9 @@ const MeteoblickWidget = (
           <Text
             modifiers={[
               font({ size: headerFontSize, weight: 'semibold' }),
-              foregroundStyle('#FFFFFF')
+              foregroundStyle('#FFFFFF'),
+              lineLimit(1),
             ]}
-            lineLimit={1}
           >
             {props.locationName || 'Keine Daten'}
           </Text>

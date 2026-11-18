@@ -48,10 +48,12 @@ describe('SharedStorage', () => {
 
   describe('Weather Data Storage', () => {
     const mockWeatherData: WeatherData = {
-      temperature: 22.5,
+      temperatureActual: 22.5,
+      temperatureForecast: 23.1,
       symbolCode: 3,
       precipitation: 0.2,
-      timestamp: '2026-07-03T12:00:00Z',
+      timestampActual: '2026-07-03T12:00:00Z',
+      timestampForecast: '2026-07-03T13:00:00Z',
       location: '1',
       locationName: 'Frauenkappelen',
     };

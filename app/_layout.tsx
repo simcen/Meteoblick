@@ -3,6 +3,7 @@ import 'react-native-gesture-handler';
 
 import { NavigationContainer, DefaultTheme, DarkTheme, Theme } from '@react-navigation/native';
 import { createNativeBottomTabNavigator } from '@bottom-tabs/react-navigation';
+import type { AppleIcon } from 'react-native-bottom-tabs';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { createStackNavigator } from '@react-navigation/stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -34,7 +35,7 @@ const Drawer = createDrawerNavigator();
 const Stack = createStackNavigator();
 
 // SF Symbols for iOS (Apple HIG compliant)
-const TabBarIcon = (sfSymbolName: string) => {
+const TabBarIcon = (sfSymbolName: AppleIcon['sfSymbol']) => {
   return () => ({
     sfSymbol: sfSymbolName,
   });
@@ -60,7 +61,6 @@ function TabNavigator() {
         options={{
           title: 'Wetter',
           tabBarIcon: TabBarIcon('cloud.sun.fill'),
-          tabBarAccessibilityLabel: 'Wetter-Tab',
         }}
       />
       <Tabs.Screen
@@ -69,7 +69,6 @@ function TabNavigator() {
         options={{
           title: 'Smart Home',
           tabBarIcon: TabBarIcon('house.fill'),
-          tabBarAccessibilityLabel: 'Smart Home Tab',
         }}
       />
     </Tabs.Navigator>

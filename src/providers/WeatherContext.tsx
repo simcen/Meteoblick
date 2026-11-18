@@ -323,8 +323,8 @@ export function WeatherProvider({ children }: WeatherProviderProps) {
       setState((s) => ({
         ...s,
         weather: cachedWeather,
-        loxoneTemp: cachedLoxone?.temperature ?? null,
-        loxoneTimestamp: cachedLoxone?.timestamp ?? null,
+        loxoneTemp: cachedLoxone?.[0]?.temperature ?? null,
+        loxoneTimestamp: cachedLoxone?.[0]?.timestamp ?? null,
       }));
     })();
 
