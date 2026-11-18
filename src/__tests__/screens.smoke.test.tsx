@@ -350,6 +350,6 @@ describe('Screen render smoke tests', () => {
         });
       })(),
     ).resolves.not.toThrow();
-    tree?.unmount();
+    (tree as TestRenderer.ReactTestRenderer | null)?.unmount();
   });
 });

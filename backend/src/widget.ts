@@ -197,6 +197,10 @@ async function fetchLoxoneTemperature(
         const location = response.headers.get('location');
         if (!location) break;
         currentURL = new URL(location, currentURL).toString();
+        if (!(await isAllowedBaseURL(new URL(currentURL).origin))) {
+          console.warn('[Widget] Loxone redirect target is not an allowed host');
+          return null;
+        }
         hops++;
         if (hops > MAX_HOPS) {
           console.warn('[Widget] Too many redirects fetching Loxone temperature');

@@ -9,7 +9,7 @@ MeteoSwiss weather forecast data API built with Hono, TypeScript, and PostgreSQL
 - ✅ Hourly weather data sync from MeteoSwiss STAC API
 - ✅ PostgreSQL database with ~5600 Swiss weather locations
 - ✅ Optimized endpoints for mobile widgets (<1KB responses)
-- ✅ Heroku deployment ready
+- ✅ Deployed with Coolify (auto deploy on push to `main`)
 
 ## API Endpoints
 
@@ -101,37 +101,36 @@ API docs: `http://localhost:3000/docs`
 - `timestamp`: Forecast timestamp
 - `updated_at`: Last sync time
 
-## Deployment to Heroku
+## Deployment (Coolify)
 
-### 1. Create Heroku app
+The API runs as a Coolify application in the same network as the Loxone
+Miniserver — the Loxone proxy (`/api/loxone/*`) and the widget timeline only
+reach private addresses.
+
+- **Source:** GitHub App, repository `simcen/Meteoblick`, branch `main`,
+  base directory `/backend`
+- **Deploy:** every push to `main` triggers a deployment
+  (Advanced → Deployment → Auto deploy: "Deploy on push (webhooks)")
+- **Build / start:** `pnpm build` (`prisma generate`) / `pnpm start`
+- **Migrations:** `pnpm prisma:migrate` (`prisma migrate deploy`) has to run
+  after schema changes, e.g. as a pre-deployment command
+
+### Environment variables
+
+| Variable | Purpose |
+|---|---|
+| `NODE_ENV` | `production` |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `API_BASE_URL` | Public URL, `https://meteoblick-api.apps.balz.me` |
+| `ADMIN_TOKEN` | Bearer token for `/api/admin/*` |
+| `ENABLE_CRON` | `false` disables the weather sync (optional) |
+| `LOXONE_ALLOWED_HOSTS` | Comma-separated `host[:port]` list; restricts the Loxone proxy to these Miniservers (optional) |
+
+### Verify
 
 ```bash
-heroku create meteoblick-api
-heroku addons:create heroku-postgresql:essential-0
-```
-
-### 2. Set environment variables
-
-```bash
-heroku config:set NODE_ENV=production
-heroku config:set API_BASE_URL=https://meteoblick-api.apps.balz.me
-```
-
-### 3. Deploy
-
-```bash
-git init
-git add .
-git commit -m "Initial backend"
-heroku git:remote -a meteoblick-api
-git push heroku main
-```
-
-### 4. Verify
-
-```bash
-heroku logs --tail
-heroku open /docs
+curl https://meteoblick-api.apps.balz.me/api/debug
+open https://meteoblick-api.apps.balz.me/docs
 ```
 
 ## CRON Job

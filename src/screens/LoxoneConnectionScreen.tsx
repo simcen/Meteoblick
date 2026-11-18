@@ -180,7 +180,7 @@ export default function LoxoneConnectionScreen() {
       const connection = await api.testConnection();
       Alert.alert(
         'Verbindung erfolgreich',
-        `URL: ${connection.baseURL}\n\nDer Miniserver ist unter dieser Adresse erreichbar.`,
+        `URL: ${connection.baseURL}\n\nDer Miniserver ist erreichbar und die Zugangsdaten stimmen.`,
       );
     } catch (error: any) {
       Alert.alert('Verbindung fehlgeschlagen', error.message || 'Unbekannter Fehler');
@@ -201,6 +201,7 @@ export default function LoxoneConnectionScreen() {
         password,
         enabled: existing?.enabled ?? false,
         sensors: existing?.sensors ?? [],
+        lockScreenCircular: existing?.lockScreenCircular,
       });
       await refreshWeather();
       Alert.alert('Gespeichert', 'Verbindung gespeichert.');

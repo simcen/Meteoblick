@@ -16,7 +16,6 @@
  * - sample/CommunicatingWithMiniserver.pdf
  */
 
-import * as Crypto from 'expo-crypto';
 import { API_BASE_URL } from '../constants';
 
 const LOXONE_PROXY_BASE = `${API_BASE_URL}/api/loxone`;
@@ -103,13 +102,6 @@ export interface LoxoneValueResponse {
   };
 }
 
-export interface LoxoneApiKeyResponse {
-  LL: {
-    value: string;
-    Code: string;
-  };
-}
-
 const TEMPERATURE_TIMEOUT_MS = 15000;
 const STRUCTURE_FILE_TIMEOUT_MS = 90000;
 
@@ -141,8 +133,6 @@ const AUTH_HEADER_TIMEOUT_MS = 10000;
 export class LoxoneAPI {
   private config: LoxoneConfig;
   private connection: LoxoneConnection | null = null;
-  private keyHash: string | null = null;
-  private authInFlight: Promise<string> | null = null;
 
   constructor(config: LoxoneConfig) {
     this.config = config;
@@ -163,12 +153,37 @@ export class LoxoneAPI {
   }
 
   /**
-   * Check that the Miniserver answers at the configured address.
+   * Check that the Miniserver answers at the configured address and accepts
+   * the credentials. /jdev/sps/LoxAPPversion3 is small and, unlike
+   * /jdev/cfg/apiKey, only served to authenticated users.
    */
   async testConnection(): Promise<LoxoneConnection> {
     const conn = await this.getConnection();
-    await this.ensureAuth();
-    return conn;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), AUTH_HEADER_TIMEOUT_MS);
+
+    try {
+      const req = this.buildRequest(conn.baseURL, '/jdev/sps/LoxAPPversion3');
+      const response = await fetch(req.url, {
+        headers: req.headers,
+        signal: controller.signal,
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        throw new LoxoneAuthError('Benutzername oder Passwort falsch.');
+      }
+      if (!response.ok) {
+        throw new LoxoneConnectionError(`Miniserver nicht erreichbar (Status ${response.status}).`);
+      }
+      return conn;
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        throw new LoxoneConnectionError('Zeitüberschreitung — Miniserver nicht erreichbar.');
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   /**
@@ -179,7 +194,6 @@ export class LoxoneAPI {
    */
   async getStructureFile(): Promise<LoxoneStructureFile> {
     const conn = await this.getConnection();
-    await this.ensureAuth();
 
     console.log('[Loxone] Fetching Structure File from:', conn.baseURL);
     console.log('[Loxone] This may take 30-60 seconds for large projects...');
@@ -290,7 +304,6 @@ export class LoxoneAPI {
    */
   async getTemperature(uuid: string): Promise<number> {
     const conn = await this.getConnection();
-    await this.ensureAuth();
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), TEMPERATURE_TIMEOUT_MS);
@@ -303,14 +316,6 @@ export class LoxoneAPI {
       });
 
       clearTimeout(timeoutId);
-
-      // 401 on a token-authenticated request = API key rotated, re-auth and retry once.
-      if (response.status === 401 && this.keyHash) {
-        console.warn('[Loxone] 401 — API key likely rotated, re-authenticating');
-        this.keyHash = null;
-        await this.ensureAuth();
-        return this.getTemperature(uuid);
-      }
 
       if (!response.ok) {
         throw new Error(`Failed to read temperature: ${response.status}`);
@@ -325,62 +330,6 @@ export class LoxoneAPI {
 
       return temperature;
     } catch (error: any) {
-      clearTimeout(timeoutId);
-      throw error;
-    }
-  }
-
-  /**
-   * Fetch API key + compute SHA-256 hash of (apiKey + ":" + password).
-   * Cached for the session; re-fetched automatically on 401.
-   */
-  private async ensureAuth(): Promise<string> {
-    if (this.keyHash) return this.keyHash;
-    if (this.authInFlight) return this.authInFlight;
-
-    this.authInFlight = this.fetchAndHashKey().finally(() => {
-      this.authInFlight = null;
-    });
-
-    return this.authInFlight;
-  }
-
-  private async fetchAndHashKey(): Promise<string> {
-    const conn = await this.getConnection();
-
-    // First request to /jdev/cfg/apiKey uses the raw password
-    const initial = this.buildInitialRequest(conn.baseURL);
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), AUTH_HEADER_TIMEOUT_MS);
-
-    try {
-      const response = await fetch(initial.url, {
-        headers: initial.headers,
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch API key: ${response.status}`);
-      }
-
-      const data: LoxoneApiKeyResponse = await parseJsonOrThrow<LoxoneApiKeyResponse>(response, 'API-Key-Lookup');
-      const apiKey = data.LL?.value;
-      if (!apiKey) {
-        throw new Error('Loxone API key missing in response');
-      }
-
-      const hash = await Crypto.digestStringAsync(
-        Crypto.CryptoDigestAlgorithm.SHA256,
-        `${apiKey}:${this.config.password}`,
-      );
-
-      // The Miniserver expects UPPERCASE hex — verified empirically:
-      // lowercase → 401 Unauthorized, uppercase → accepted (tested with curl).
-      this.keyHash = hash.toUpperCase();
-      console.log('[Loxone] Token authentication successful');
-      return this.keyHash;
-    } catch (error) {
       clearTimeout(timeoutId);
       throw error;
     }
@@ -412,29 +361,15 @@ export class LoxoneAPI {
    * Build URL + headers for an authenticated request.
    *
    * Empirically: the Miniserver accepts HTTP Basic Auth with the raw password
-   * for /data/LoxAPP3.json and /jdev/sps/io/{uuid}, but rejects the SHA-256
-   * SHA-256(apiKey+":"+password) hash for those endpoints (only /jdev/cfg/apiKey
-   * accepts the hash). So we send the password directly here.
+   * for /data/LoxAPP3.json and /jdev/sps/io/{uuid}, but rejects the
+   * SHA-256(apiKey+":"+password) hash for those endpoints. So we send the
+   * password directly here.
    *
-   * `ensureAuth` is still called beforehand to fetch /jdev/cfg/apiKey as a
-   * connectivity check (the endpoint is public but verifies the Miniserver is
-   * reachable and that our credentials are at least syntactically correct).
-   *
-   * All requests are routed through the backend proxy to bypass iOS-simulator
-   * PAC-proxy issues; the backend forwards them to the Miniserver.
+   * All requests are routed through the backend proxy, which forwards them
+   * to the Miniserver.
    */
   private buildRequest(baseURL: string, path: string): { url: string; headers: HeadersInit } {
     return this.buildProxyRequest(baseURL, path, this.config.password);
-  }
-
-  /**
-   * Like buildRequest, but uses the raw password. Only used for the very first
-   * /jdev/cfg/apiKey exchange — the password is never sent again after that.
-   */
-  private buildInitialRequest(
-    baseURL: string,
-  ): { url: string; headers: HeadersInit } {
-    return this.buildProxyRequest(baseURL, '/jdev/cfg/apiKey', this.config.password);
   }
 
   /**
@@ -457,12 +392,10 @@ export class LoxoneAPI {
   }
 
   /**
-   * Clear cached connection + auth (force re-detection and re-auth)
+   * Clear cached connection
    */
   resetConnection(): void {
     this.connection = null;
-    this.keyHash = null;
-    this.authInFlight = null;
   }
 }
 

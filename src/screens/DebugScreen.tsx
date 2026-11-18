@@ -382,7 +382,7 @@ export default function DebugScreen() {
                 <View style={styles.debugRow}>
                   <Text style={styles.debugLabel}>Sensor UUID:</Text>
                   <Text style={[styles.debugValue, styles.uuidText]} numberOfLines={1}>
-                    {loxoneConfig.sensors.find((s) => s.showInApp)?.uuid || 'n/a'}
+                    {loxoneConfig.sensors.find((s: { showInApp: boolean }) => s.showInApp)?.uuid || 'n/a'}
                   </Text>
                 </View>
               </>
