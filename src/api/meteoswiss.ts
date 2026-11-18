@@ -1,6 +1,7 @@
 import type { WeatherData, WeatherError } from '../types/weather';
 import type { POI } from '../types/poi';
-import { API_BASE_URL, LAST_FETCH_KEY } from '../constants';
+import { LAST_FETCH_KEY } from '../constants';
+import { apiFetch } from './client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface BackendWeatherResponse {
@@ -30,8 +31,7 @@ export class MeteoSwissAPI {
       console.log(`📡 Fetching weather from backend API for POI: ${pointId}`);
       const startTime = Date.now();
 
-      const url = `${API_BASE_URL}/api/weather/${pointId}`;
-      const response = await fetch(url);
+      const response = await apiFetch(`/api/weather/${pointId}`);
 
       if (!response.ok) {
         if (response.status === 404) {
@@ -79,12 +79,12 @@ export class MeteoSwissAPI {
       console.log('📡 Fetching POI list from backend API...');
       const startTime = Date.now();
 
-      let url = `${API_BASE_URL}/api/pois`;
+      let path = '/api/pois';
       if (search && search.length >= 2) {
-        url += `?search=${encodeURIComponent(search)}`;
+        path += `?search=${encodeURIComponent(search)}`;
       }
 
-      const response = await fetch(url);
+      const response = await apiFetch(path);
 
       if (!response.ok) {
         throw this.createError('api_error', `Backend API returned ${response.status}`);

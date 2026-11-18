@@ -13,15 +13,18 @@ import { adminRouter } from './admin.js';
 import { debugRouter } from './debug.js';
 import { loxoneRouter } from './loxone.js';
 import { widgetRouter } from './widget.js';
+import { requireApiToken } from './middleware/auth.js';
 
 const app = new OpenAPIHono();
+
+app.use('/api/*', requireApiToken);
 
 app.route('/api', weatherRouter);
 app.route('/api', poisRouter);
 app.route('/api', adminRouter);
 app.route('/api', debugRouter);
 app.route('/api', widgetRouter);
-app.route('/', loxoneRouter);
+app.route('/api', loxoneRouter);
 
 app.get('/', (c) => {
   return c.json({
@@ -33,7 +36,8 @@ app.get('/', (c) => {
       weather: '/api/weather/{pointId}',
       pois: '/api/pois',
       admin: '/api/admin/sync (requires Bearer token)',
-      loxone: '/api/loxone/* (proxy — requires X-Loxone-BaseURL + X-Loxone-Auth headers)',
+      loxone: '/api/loxone/sensors, /api/loxone/temperatures',
+      auth: 'all /api endpoints require Authorization: Bearer <API_TOKEN>',
     },
   });
 });

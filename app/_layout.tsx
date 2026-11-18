@@ -24,7 +24,6 @@ import DebugScreen from '../src/screens/DebugScreen';
 import SettingsScreen from '../src/screens/SettingsScreen';
 import OrteScreen from '../src/screens/OrteScreen';
 import LoxoneConfigScreen from '../src/screens/LoxoneConfigScreen';
-import LoxoneConnectionScreen from '../src/screens/LoxoneConnectionScreen';
 import SensorVisibilityScreen from '../src/screens/SensorVisibilityScreen';
 
 // Import widget to ensure Metro bundles it for expo-widgets compiler
@@ -115,14 +114,6 @@ function MainStack() {
       <Stack.Screen
         name="Loxone"
         component={LoxoneConfigScreen}
-        options={{
-          presentation: 'modal',
-          gestureEnabled: true,
-        }}
-      />
-      <Stack.Screen
-        name="LoxoneConnection"
-        component={LoxoneConnectionScreen}
         options={{
           presentation: 'modal',
           gestureEnabled: true,

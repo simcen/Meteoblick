@@ -20,7 +20,7 @@ Das `postprebuild` npm-Script ist in `package.json` registriert.
 ## Architektur (heute)
 
 ```
-App (JS)        →  Backend (Hono)  →  Miniserver     (lokal im Netz des Backends, Credentials in App)
+App (JS)        →  Backend (Hono)  →  Miniserver     (lokal im Netz des Backends, Credentials nur im Backend)
 App (JS)        →  Backend (Hono)  →  MeteoSwiss     (Wetter, kein Loxone)
 Widget (Swift)  →  noch nicht implementiert — soll:
                     1. Credentials aus App Group lesen
@@ -33,9 +33,8 @@ Widget (Swift)  →  noch nicht implementiert — soll:
 ```
 GET /api/widget/timeline?poiId={poiId}
 Headers:
-  X-Loxone-BaseURL:    http://192.168.1.47 (optional, Protokoll + Adresse des Miniservers)
-  X-Loxone-Sensor-Uuid: 1b4bd480-...      (optional, wenn Loxone)
-  X-Loxone-Credentials: Basic base64(user:password)   (optional, wenn Loxone)
+  Authorization:         Bearer <API_TOKEN>   (Pflicht)
+  X-Loxone-Sensor-UUIDs: 1b4bd480-...,...     (optional, kommagetrennt)
 
 Response 200 (application/json):
 {
@@ -70,7 +69,7 @@ Die App schreibt bei jedem Config-Update in den App Group Container. Das Widget 
 |---|---|---|
 | `meteoblick_widget_last_refresh` | ISO timestamp letzte Update | `updateWidget()` |
 | `meteoblick_weather_snapshot` | Wetter-Snapshot (JSON) | (geplant) |
-| `loxone_config_widget` | `{ baseUrl, username, password, showInWidgetSensorUuids, poiId, apiBaseUrl, lockScreenCircular }` | `setLoxoneConfig()` |
+| `loxone_config_widget` | `{ showInWidgetSensorUuids, poiId, apiBaseUrl, apiToken, lockScreenCircular }` | `setLoxoneConfig()` |
 | `loxone_sensor_data` | `{ temperature, timestamp }` (Cache) | `setLoxoneSensorData()` |
 
 Lese-Keys sind Konstanten in `src/constants.ts`:
@@ -141,18 +140,12 @@ struct WidgetBackend {
     static func fetchTimeline(baseURL: URL, poiId: String) async throws -> TimelineResponse {
         var request = URLRequest(url: baseURL.appendingPathComponent("/api/widget/timeline?poiId=\(poiId)"))
 
-        // Read Loxone config from App Group (UserDefaults suite)
+        // Read widget config from App Group (UserDefaults suite)
         if let defaults = UserDefaults(suiteName: appGroup),
            let data = defaults.data(forKey: widgetLoxoneKey),
-           let config = try? JSONDecoder().decode(LoxoneConfig.self, from: data) {
-            request.setValue(config.baseUrl, forHTTPHeaderField: "X-Loxone-BaseURL")
-            if let uuid = config.temperatureSensorUUID {
-                request.setValue(uuid, forHTTPHeaderField: "X-Loxone-Sensor-Uuid")
-            }
-            // Credentials are base64(user:pass) — matches the backend's X-Loxone-Credentials parser
-            let creds = "\(config.username):\(config.password)"
-                .data(using: .utf8)?.base64EncodedString() ?? ""
-            request.setValue("Basic \(creds)", forHTTPHeaderField: "X-Loxone-Credentials")
+           let config = try? JSONDecoder().decode(WidgetConfig.self, from: data) {
+            request.setValue("Bearer \(config.apiToken)", forHTTPHeaderField: "Authorization")
+            request.setValue(config.showInWidgetSensorUuids.joined(separator: ","), forHTTPHeaderField: "X-Loxone-Sensor-UUIDs")
         }
 
         let (data, _) = try await URLSession.shared.data(for: request)
@@ -161,11 +154,9 @@ struct WidgetBackend {
     }
 }
 
-struct LoxoneConfig: Codable {
-    let baseUrl: String
-    let username: String
-    let password: String
-    let temperatureSensorUUID: String?
+struct WidgetConfig: Codable {
+    let apiToken: String
+    let showInWidgetSensorUuids: [String]
 }
 
 struct TimelineResponse: Codable {

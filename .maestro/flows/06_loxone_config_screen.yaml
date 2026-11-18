@@ -16,4 +16,4 @@ appId: ch.meteoblick
 - assertVisible:
     text: "Loxone aktivieren"
 - assertVisible:
-    text: "Verbindung"
+    text: "Temperatursensoren"

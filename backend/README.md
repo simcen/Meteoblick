@@ -18,7 +18,24 @@ MeteoSwiss weather forecast data API built with Hono, TypeScript, and PostgreSQL
 - `GET /openapi` - OpenAPI specification JSON
 - `GET /api/weather/{pointId}` - Get weather for specific location
 - `GET /api/pois?search={query}` - Search locations
+- `GET /api/widget/timeline?poiId={poiId}` - Single-shot payload for the iOS widget
+- `GET /api/loxone/sensors` - Temperature sensors of the Loxone Miniserver
+- `GET /api/loxone/temperatures?uuids={uuid,...}` - Current sensor values
 - `POST /api/admin/sync` - Manually trigger data sync (requires Bearer token)
+
+## Authentication
+
+All `/api` endpoints require the pre-shared secret from the `API_TOKEN`
+environment variable:
+
+```
+Authorization: Bearer <API_TOKEN>
+```
+
+The app reads the same value at build time from `EXPO_PUBLIC_API_TOKEN` in
+the repository's `.env.local` (not committed) and passes it on to the widget.
+Generate one with `openssl rand -hex 32`. `/api/admin/*` uses its own
+`ADMIN_TOKEN` instead.
 
 ## API Testing
 
@@ -104,8 +121,8 @@ API docs: `http://localhost:3000/docs`
 ## Deployment (Coolify)
 
 The API runs as a Coolify application in the same network as the Loxone
-Miniserver — the Loxone proxy (`/api/loxone/*`) and the widget timeline only
-reach private addresses.
+Miniserver. The Miniserver address and credentials are configured here as
+environment variables only — the app never sees them.
 
 - **Source:** GitHub App, repository `simcen/Meteoblick`, branch `main`,
   base directory `/backend`
@@ -124,12 +141,14 @@ reach private addresses.
 | `API_BASE_URL` | Public URL, `https://meteoblick-api.apps.balz.me` |
 | `ADMIN_TOKEN` | Bearer token for `/api/admin/*` |
 | `ENABLE_CRON` | `false` disables the weather sync (optional) |
-| `LOXONE_ALLOWED_HOSTS` | Comma-separated `host[:port]` list; restricts the Loxone proxy to these Miniservers (optional) |
+| `API_TOKEN` | Pre-shared secret; the app sends it as `Authorization: Bearer …`. Without it all `/api` endpoints answer 503 |
+| `LOXONE_BASE_URL` | Miniserver address incl. protocol, e.g. `http://192.168.1.47` (optional, enables Loxone) |
+| `LOXONE_USERNAME` / `LOXONE_PASSWORD` | Miniserver user (optional, enables Loxone) |
 
 ### Verify
 
 ```bash
-curl https://meteoblick-api.apps.balz.me/api/debug
+curl -H "Authorization: Bearer $API_TOKEN" https://meteoblick-api.apps.balz.me/api/debug
 open https://meteoblick-api.apps.balz.me/docs
 ```
 

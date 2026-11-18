@@ -117,10 +117,6 @@ describe('SharedStorage', () => {
 
     it('should store and retrieve a new-shape Loxone config', async () => {
       const cfg = {
-        host: '192.168.1.47',
-        protocol: 'http',
-        username: 'admin',
-        password: 'pw',
         enabled: true,
         sensors: [
           { uuid: 'aa-1', name: 'Aussen', showInApp: true, showInWidget: true, order: 0 },
@@ -168,9 +164,10 @@ describe('SharedStorage', () => {
       expect(persisted.sensors[0].uuid).toBe('legacy-uuid-123');
     });
 
-    it('should migrate a cloud config: drops the serial number, keeps credentials and sensors', async () => {
-      const cloud = {
-        cloudAddress: '504F94A1874F',
+    it('should drop address and credentials from stored configs, keeping sensors', async () => {
+      const withConnection = {
+        host: '192.168.1.47',
+        protocol: 'http',
         username: 'admin',
         password: 'pw',
         enabled: true,
@@ -179,42 +176,58 @@ describe('SharedStorage', () => {
           { uuid: 'aa-1', name: 'Aussen', showInApp: true, showInWidget: true, order: 0 },
         ],
       };
-      (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(JSON.stringify(cloud));
+      (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(JSON.stringify(withConnection));
 
       const result = await SharedStorage.getLoxoneConfig();
       expect(result).toEqual({
-        host: '',
-        protocol: 'http',
-        username: 'admin',
-        password: 'pw',
         enabled: true,
         lockScreenCircular: 'aa-1',
-        sensors: cloud.sensors,
+        sensors: withConnection.sensors,
       });
-      // Persisted, so the migration runs only once
-      const persisted = JSON.parse((AsyncStorage.setItem as jest.Mock).mock.calls[0][1]);
-      expect(persisted).toEqual(result);
+      // Neither the app's storage nor the widget's App Group copy keeps them
+      const persisted = (AsyncStorage.setItem as jest.Mock).mock.calls[0][1];
+      const mirrored = (SharedGroupPreferences.setItem as jest.Mock).mock.calls.find(
+        (c) => c[0] === 'loxone_config_widget',
+      )[1];
+      for (const stored of [persisted, mirrored]) {
+        expect(stored).not.toContain('admin');
+        expect(stored).not.toContain('pw');
+        expect(stored).not.toContain('192.168.1.47');
+      }
     });
 
-    it('should mirror the Miniserver base URL to the widget config', async () => {
+    it('should mirror sensors and API access to the widget config, but nothing about the Miniserver', async () => {
       await SharedStorage.setLoxoneConfig({
-        host: 'miniserver.lan:8443',
-        protocol: 'https',
-        username: 'admin',
-        password: 'pw',
         enabled: true,
         sensors: [
           { uuid: 'aa-1', name: 'Aussen', showInApp: true, showInWidget: true, order: 0 },
+          { uuid: 'bb-2', name: 'Keller', showInApp: true, showInWidget: false, order: 1 },
         ],
       });
 
       const mirrorCall = (SharedGroupPreferences.setItem as jest.Mock).mock.calls.find(
         (c) => c[0] === 'loxone_config_widget',
       );
-      const mirrored = JSON.parse(mirrorCall[1]);
-      expect(mirrored.baseUrl).toBe('https://miniserver.lan:8443');
-      expect(mirrored.username).toBe('admin');
-      expect(mirrored.showInWidgetSensorUuids).toEqual(['aa-1']);
+      expect(Object.keys(JSON.parse(mirrorCall[1])).sort()).toEqual([
+        'apiBaseUrl',
+        'apiToken',
+        'lockScreenCircular',
+        'poiId',
+        'showInWidgetSensorUuids',
+      ]);
+      expect(JSON.parse(mirrorCall[1]).showInWidgetSensorUuids).toEqual(['aa-1']);
+    });
+
+    it('addSensor: creates the config when none exists yet', async () => {
+      (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(null);
+
+      const result = await SharedStorage.addSensor({
+        uuid: 'a', name: 'A', showInApp: true, showInWidget: true,
+      });
+      expect(result).toEqual({
+        enabled: false,
+        sensors: [{ uuid: 'a', name: 'A', showInApp: true, showInWidget: true, order: 0 }],
+      });
     });
 
     it('should use UUID as name fallback when migrating without temperatureSensorName', async () => {
@@ -232,7 +245,7 @@ describe('SharedStorage', () => {
 
     it('addSensor: appends a sensor with order = max+1', async () => {
       const cfg = {
-        host: '192.168.1.47', protocol: 'http', username: 'u', password: 'p', enabled: true,
+        enabled: true,
         sensors: [
           { uuid: 'a', name: 'A', showInApp: true, showInWidget: true, order: 0 },
           { uuid: 'b', name: 'B', showInApp: true, showInWidget: true, order: 1 },
@@ -250,7 +263,7 @@ describe('SharedStorage', () => {
 
     it('removeSensor: drops + re-numbers orders', async () => {
       const cfg = {
-        host: '192.168.1.47', protocol: 'http', username: 'u', password: 'p', enabled: true,
+        enabled: true,
         sensors: [
           { uuid: 'a', name: 'A', showInApp: true, showInWidget: true, order: 0 },
           { uuid: 'b', name: 'B', showInApp: true, showInWidget: true, order: 1 },
@@ -266,7 +279,7 @@ describe('SharedStorage', () => {
 
     it('updateSensor: applies partial changes', async () => {
       const cfg = {
-        host: '192.168.1.47', protocol: 'http', username: 'u', password: 'p', enabled: true,
+        enabled: true,
         sensors: [
           { uuid: 'a', name: 'A', showInApp: true, showInWidget: true, order: 0 },
         ],
@@ -282,7 +295,7 @@ describe('SharedStorage', () => {
 
     it('reorderSensors: applies new order', async () => {
       const cfg = {
-        host: '192.168.1.47', protocol: 'http', username: 'u', password: 'p', enabled: true,
+        enabled: true,
         sensors: [
           { uuid: 'a', name: 'A', showInApp: true, showInWidget: true, order: 0 },
           { uuid: 'b', name: 'B', showInApp: true, showInWidget: true, order: 1 },
@@ -297,7 +310,7 @@ describe('SharedStorage', () => {
 
     it('reorderSensors: throws on unknown UUID', async () => {
       const cfg = {
-        host: '192.168.1.47', protocol: 'http', username: 'u', password: 'p', enabled: true,
+        enabled: true,
         sensors: [
           { uuid: 'a', name: 'A', showInApp: true, showInWidget: true, order: 0 },
         ],

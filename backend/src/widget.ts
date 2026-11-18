@@ -7,21 +7,19 @@
  *
  * - Direct fetching from the iOS Widget Extension (Swift TimelineProvider) so
  *   the widget does NOT depend on the host app's background-fetch budget.
- * - Multi-tenant cache: keyed by poiId (and optional Miniserver base URL) so multiple
- *   users sharing the same Miniserver benefit from the same cache entries.
- *   The cache key does NOT include user identity — user auth is a separate
- *   concern handled by middleware (not yet implemented).
+ * - Cache: keyed by poiId (and sensor UUID) so all callers benefit from
+ *   the same cache entries.
  *
  * Caches:
  *   - widget:timeline:poi:{poiId}             — weather snapshot
- *   - widget:timeline:loxe:{baseURL}:{uuid}    — Loxone temperature (if X-Loxone-BaseURL)
+ *   - widget:timeline:loxe:{uuid}              — Loxone temperature (if sensor UUIDs)
  *
  * Cache TTL: 5 minutes (matches the foreground refresh interval in the app).
  */
 import { createRoute, z } from '@hono/zod-openapi';
 import { OpenAPIHono } from '@hono/zod-openapi';
 import * as db from './services/db.js';
-import { isAllowedBaseURL } from './loxone.js';
+import { getTemperature, isLoxoneUuid } from './services/loxone.js';
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -35,9 +33,8 @@ interface CacheEntry<T> {
 // the cache key is the data source (poiId), not the user.
 const weatherCache = new Map<string, CacheEntry<unknown>>();
 
-// Loxone cache: per (baseURL, sensorUuid) since the same sensor value is
-// identical for any caller. We cache even though we don't have user
-// credentials, because the temperature reading is independent of credentials.
+// Loxone cache: per sensorUuid since the same sensor value is identical
+// for any caller.
 const loxoneCache = new Map<string, CacheEntry<unknown>>();
 
 function getCached<T>(cache: Map<string, CacheEntry<unknown>>, key: string): T | null {
@@ -105,22 +102,14 @@ const getWidgetTimelineRoute = createRoute({
     'Returns everything the iOS widget needs to render a fresh snapshot: ' +
     'current weather, next-hour forecast, and optional Loxone indoor ' +
     'temperature. Designed to be called by the Widget Extension directly ' +
-    '(Swift TimelineProvider), independent of the host app. Loxone ' +
-    'credentials are passed in headers per request (no auth, no ' +
-    'persistence — the backend is stateless for credentials).',
+    '(Swift TimelineProvider), independent of the host app. The widget ' +
+    'only names the Loxone sensors; the Miniserver is configured on the backend.',
   tags: ['Widget'],
   request: {
     query: z.object({
       poiId: z.string().openapi({ example: '320200' }),
     }),
     headers: z.object({
-      'x-loxone-baseurl': z
-        .string()
-        .optional()
-        .openapi({
-          example: 'http://192.168.1.47',
-          description: 'Miniserver base URL (protocol + host) in the backend\'s local network',
-        }),
       'x-loxone-sensor-uuids': z
         .string()
         .optional()
@@ -139,13 +128,6 @@ const getWidgetTimelineRoute = createRoute({
           example: '1b4bd480-0352-6c00-ffff0fb3607cf0ae',
           description: 'Loxone temperature sensor UUID (deprecated)',
         }),
-      'x-loxone-credentials': z
-        .string()
-        .optional()
-        .openapi({
-          example: 'c2ltb246aGF1cy1pbnRlbGxpZ2VudC1iZXJn',
-          description: 'base64(user:password) for Miniserver Basic auth',
-        }),
     }),
   },
   responses: {
@@ -162,97 +144,24 @@ const getWidgetTimelineRoute = createRoute({
 
 export const widgetRouter = new OpenAPIHono();
 
-// Helper: fetch Loxone temperature for a specific sensor UUID. Uses the
-// raw password (verified empirically that the Miniserver accepts it for
-// /jdev/sps/io/{uuid}, but rejects the SHA-256(apiKey+password) hash).
-//
-// We follow 307 redirects manually because Node fetch strips Authorization
-// headers on cross-origin hops, which would cause 401 on the final URL.
+// Helper: fetch Loxone temperature for a specific sensor UUID. Returns
+// null on any failure (not configured, unreachable, bad value).
 async function fetchLoxoneTemperature(
-  baseURL: string,
   sensorUuid: string,
-  credentialsB64: string,
 ): Promise<{ temperature: number; timestamp: string } | null> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-  // credentialsB64 is already "Basic " + base64(user:pass) — pass through.
-  const auth = credentialsB64.startsWith('Basic ') ? credentialsB64 : `Basic ${credentialsB64}`;
-
   try {
-    let currentURL = `${baseURL.replace(/\/$/, '')}/jdev/sps/io/${sensorUuid}`;
-    let response: Response;
-    let hops = 0;
-    const MAX_HOPS = 5;
-
-    while (true) {
-      response = await fetch(currentURL, {
-        method: 'GET',
-        headers: { Authorization: auth },
-        signal: controller.signal,
-        redirect: 'manual',
-      });
-
-      if (response.status >= 300 && response.status < 400) {
-        const location = response.headers.get('location');
-        if (!location) break;
-        currentURL = new URL(location, currentURL).toString();
-        if (!(await isAllowedBaseURL(new URL(currentURL).origin))) {
-          console.warn('[Widget] Loxone redirect target is not an allowed host');
-          return null;
-        }
-        hops++;
-        if (hops > MAX_HOPS) {
-          console.warn('[Widget] Too many redirects fetching Loxone temperature');
-          return null;
-        }
-        continue;
-      }
-      break;
-    }
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      console.warn(`[Widget] Loxone temperature fetch failed: ${response.status}`);
-      return null;
-    }
-
-    const body = await response.text();
-    let parsed: { LL?: { value?: string } };
-    try {
-      parsed = JSON.parse(body);
-    } catch (err) {
-      console.warn(`[Widget] Loxone response not JSON (truncated): ${body.slice(-100)}`);
-      return null;
-    }
-
-    const tempStr = parsed.LL?.value;
-    if (!tempStr) {
-      console.warn('[Widget] Loxone response missing LL.value');
-      return null;
-    }
-    const temperature = parseFloat(tempStr);
-    if (isNaN(temperature)) {
-      console.warn(`[Widget] Loxone temperature not numeric: ${tempStr}`);
-      return null;
-    }
-    return { temperature, timestamp: new Date().toISOString() };
+    return { temperature: await getTemperature(sensorUuid), timestamp: new Date().toISOString() };
   } catch (error) {
     console.warn('[Widget] Loxone fetch error:', (error as Error).message);
     return null;
-  } finally {
-    clearTimeout(timeoutId);
   }
 }
 
 widgetRouter.openapi(getWidgetTimelineRoute, async (c) => {
   const { poiId } = c.req.valid('query');
   const headers = c.req.valid('header');
-  const loxoneBaseURL = headers['x-loxone-baseurl'];
   const loxoneSensorUuid = headers['x-loxone-sensor-uuid'];
   const loxoneSensorUuidsHeader = headers['x-loxone-sensor-uuids'];
-  const loxoneCredentials = headers['x-loxone-credentials'];
 
   // Weather: per-POI cache, shared across all callers.
   const weatherCacheKey = `widget:timeline:poi:${poiId}`;
@@ -297,11 +206,9 @@ widgetRouter.openapi(getWidgetTimelineRoute, async (c) => {
   }
 
   // Loxone: multi-sensor if x-loxone-sensor-uuids is set, else fall back
-  // to legacy x-loxone-sensor-uuid. Per-(baseURL,sensor) cache so each reading
+  // to legacy x-loxone-sensor-uuid. Per-sensor cache so each reading
   // is independent of the caller.
   const loxoneResult = await fetchLoxoneMultiSensor({
-    baseURL: loxoneBaseURL,
-    credentials: loxoneCredentials,
     multiHeader: loxoneSensorUuidsHeader,
     legacySingleUuid: loxoneSensorUuid,
   });
@@ -343,18 +250,13 @@ export function parseSensorUuids(
  * "primary" for backward compat. Exported for unit testing.
  */
 export async function fetchLoxoneMultiSensor(opts: {
-  baseURL: string | undefined;
-  credentials: string | undefined;
   multiHeader: string | undefined;
   legacySingleUuid: string | undefined;
 }): Promise<{
   primary: { temperature: number; timestamp: string } | null;
   sensors: Array<{ uuid: string; name: string; temperature: number; timestamp: string }> | undefined;
 }> {
-  if (!opts.baseURL || !opts.credentials || !(await isAllowedBaseURL(opts.baseURL))) {
-    return { primary: null, sensors: undefined };
-  }
-  const uuids = parseSensorUuids(opts.multiHeader, opts.legacySingleUuid);
+  const uuids = parseSensorUuids(opts.multiHeader, opts.legacySingleUuid).filter(isLoxoneUuid);
   if (uuids.length === 0) {
     return { primary: null, sensors: undefined };
   }
@@ -363,7 +265,7 @@ export async function fetchLoxoneMultiSensor(opts: {
   const cached = uuids.map((uuid) =>
     getCached<{ temperature: number; timestamp: string }>(
       loxoneCache,
-      `widget:timeline:loxe:${opts.baseURL}:${uuid}`,
+      `widget:timeline:loxe:${uuid}`,
     ),
   );
   const missingIdx = uuids
@@ -373,13 +275,13 @@ export async function fetchLoxoneMultiSensor(opts: {
 
   const fetched = await Promise.all(
     missing.map((uuid) =>
-      fetchLoxoneTemperature(opts.baseURL!, uuid, opts.credentials!).then((r) => ({ uuid, r })),
+      fetchLoxoneTemperature(uuid).then((r) => ({ uuid, r })),
     ),
   );
 
   // Write back freshly-fetched values to cache
   for (const { uuid, r } of fetched) {
-    if (r) setCache(loxoneCache, `widget:timeline:loxe:${opts.baseURL}:${uuid}`, r);
+    if (r) setCache(loxoneCache, `widget:timeline:loxe:${uuid}`, r);
   }
 
   // Build the response array, skipping any uuid whose fetch failed (no

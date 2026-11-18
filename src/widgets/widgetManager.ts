@@ -13,9 +13,9 @@
  */
 import meteoblickWidget from '../../widgets/MeteoblickWidget';
 import SharedGroupPreferences from 'react-native-shared-group-preferences';
-import { APP_GROUP_ID, WIDGET_LAST_REFRESH_KEY, API_BASE_URL } from '../constants';
+import { APP_GROUP_ID, WIDGET_LAST_REFRESH_KEY } from '../constants';
 import { SharedStorage } from '../storage/SharedStorage';
-import { buildLoxoneBaseURL } from '../api/loxone';
+import { apiFetch } from '../api/client';
 import { BUILD_NUMBER } from '../constants';
 
 // Widget props type
@@ -85,8 +85,8 @@ export async function updateWidget(props: WidgetProps): Promise<void> {
  * data into one response, so the widget has everything it needs in a
  * single round-trip.
  *
- * Loxone credentials are passed in headers per request — the backend is
- * stateless and never persists them.
+ * Only the Loxone sensor UUIDs are passed — the Miniserver itself is
+ * configured on the backend.
  *
  * Falls back to the previous snapshot in App Group on fetch failure, so
  * the widget keeps showing the last known good data.
@@ -101,21 +101,16 @@ export async function fetchAndWriteWidgetTimeline(): Promise<void> {
       return;
     }
 
-    // Build headers for Loxone (if configured + enabled)
     // Phase 4b+: pass ALL showInWidget sensors (multi-uuid) so the
     // backend's /api/widget/timeline returns smartHomeSensors[].
     const headers: Record<string, string> = {};
     const loxoneConfig = await SharedStorage.getLoxoneConfig();
     const widgetSensorUuids = loxoneConfig?.sensors.filter((s) => s.showInWidget).map((s) => s.uuid) ?? [];
-    if (loxoneConfig?.enabled && loxoneConfig.host && widgetSensorUuids.length > 0) {
-      headers['X-Loxone-BaseURL'] = buildLoxoneBaseURL(loxoneConfig.protocol, loxoneConfig.host);
+    if (loxoneConfig?.enabled && widgetSensorUuids.length > 0) {
       headers['X-Loxone-Sensor-UUIDs'] = widgetSensorUuids.join(',');
-      const credentials = btoa(`${loxoneConfig.username}:${loxoneConfig.password}`);
-      headers['X-Loxone-Credentials'] = `Basic ${credentials}`;
     }
 
-    const url = `${API_BASE_URL}/api/widget/timeline?poiId=${encodeURIComponent(poiId)}`;
-    const response = await fetch(url, { method: 'GET', headers });
+    const response = await apiFetch(`/api/widget/timeline?poiId=${encodeURIComponent(poiId)}`, { headers });
 
     if (!response.ok) {
       console.warn(`[Widget] Timeline fetch failed: HTTP ${response.status}`);

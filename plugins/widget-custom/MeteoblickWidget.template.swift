@@ -3,16 +3,14 @@ import SwiftUI
 
 // MARK: - Widget Configuration (App Group mirror)
 //
-// Mirrors credentials + showInWidget sensor UUIDs + POI + apiBaseUrl
+// Mirrors API token + showInWidget sensor UUIDs + POI + apiBaseUrl
 // from the host app's SharedStorage. The widget reads this on every
 // timeline reload to know which POI to fetch + which Loxone sensors to
 // ask the backend for.
 
 struct WidgetConfig: Codable {
-    // Miniserver base URL ("http://192.168.1.47"); nil/empty = no address yet.
-    let baseUrl: String?
-    let username: String
-    let password: String
+    // Pre-shared secret the backend expects on every request.
+    let apiToken: String?
     let showInWidgetSensorUuids: [String]?
     let poiId: String?
     let apiBaseUrl: String?
@@ -47,8 +45,8 @@ enum WidgetConfigStore {
 // budgets. Doing two parallel requests would split the work and still
 // cost two round-trips. The backend is the right place to consolidate.
 //
-// Credentials are passed per-request via headers — the backend is
-// stateless for Loxone auth (deliberate, see CLAUDE.md).
+// Only the sensor UUIDs are passed — the Miniserver address and
+// credentials are configured on the backend.
 
 struct WidgetTimelineResponse: Codable {
     let locationName: String?
@@ -85,16 +83,14 @@ struct TimelineSmartHomeSensor: Codable {
 
 actor WidgetTimelineClient {
     private let baseURL: String
-    private let loxoneBaseURL: String?
-    private let loxoneCredentials: String?  // "Basic <base64>"
+    private let apiToken: String?
     private let loxoneSensorUuids: [String]?
 
     private static let requestTimeout: TimeInterval = 6
 
-    init(baseURL: String, loxoneBaseURL: String?, loxoneCredentials: String?, loxoneSensorUuids: [String]?) {
+    init(baseURL: String, apiToken: String?, loxoneSensorUuids: [String]?) {
         self.baseURL = baseURL
-        self.loxoneBaseURL = loxoneBaseURL
-        self.loxoneCredentials = loxoneCredentials
+        self.apiToken = apiToken
         self.loxoneSensorUuids = loxoneSensorUuids
     }
 
@@ -109,15 +105,12 @@ actor WidgetTimelineClient {
         request.timeoutInterval = Self.requestTimeout
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        // Pass Loxone credentials + sensor UUIDs as headers. Backend uses
-        // them to fetch the multi-sensor payload server-side and returns
-        // it consolidated in smartHomeSensors[].
-        if let loxoneBase = loxoneBaseURL, !loxoneBase.isEmpty {
-            request.setValue(loxoneBase, forHTTPHeaderField: "X-Loxone-BaseURL")
+        if let token = apiToken, !token.isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
-        if let creds = loxoneCredentials, !creds.isEmpty {
-            request.setValue(creds, forHTTPHeaderField: "X-Loxone-Credentials")
-        }
+        // Pass the sensor UUIDs as header. Backend fetches the multi-sensor
+        // payload from the Miniserver and returns it consolidated in
+        // smartHomeSensors[].
         if let uuids = loxoneSensorUuids, !uuids.isEmpty {
             request.setValue(uuids.joined(separator: ","), forHTTPHeaderField: "X-Loxone-Sensor-UUIDs")
         }
@@ -276,10 +269,7 @@ struct MeteoblickProvider: TimelineProvider {
               let base = config.apiBaseUrl, !base.isEmpty else { return false }
         let client = WidgetTimelineClient(
             baseURL: base,
-            loxoneBaseURL: config.baseUrl,
-            loxoneCredentials: config.password.isEmpty
-                ? nil
-                : "Basic \(Data("\(config.username):\(config.password)".utf8).base64EncodedString())",
+            apiToken: config.apiToken,
             loxoneSensorUuids: config.showInWidgetSensorUuids
         )
         guard let timeline = await client.fetchTimeline(poiId: poiId) else { return false }

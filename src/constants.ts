@@ -25,3 +25,7 @@ const PROD_API_BASE_URL = 'https://meteoblick-api.apps.balz.me';
 const DEV_API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:3000';
 
 export const API_BASE_URL = __DEV__ ? DEV_API_BASE_URL : PROD_API_BASE_URL;
+
+// Pre-shared secret the backend expects on every /api request. Set
+// EXPO_PUBLIC_API_TOKEN in .env.local (not committed; inlined at bundle time).
+export const API_TOKEN = process.env.EXPO_PUBLIC_API_TOKEN ?? '';
