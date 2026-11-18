@@ -4,16 +4,15 @@
 > Cloud DNS, Seriennummer) ist ersetzt. Loxone lässt Remote Connect nur noch für
 > die eigene App und Loxone Config zu. Aktuell gilt:
 >
-> - In der App werden **Adresse** (IP oder DNS-Name, optional mit Port) und
->   **Protokoll** (HTTP/HTTPS) des Miniservers konfiguriert, dazu Benutzername
->   und Passwort.
-> - Die App spricht nicht direkt mit dem Miniserver, sondern über den
->   Backend-Proxy `/api/loxone/*`. Das Backend läuft im selben Netz wie der
->   Miniserver und erreicht nur private Adressen (optional eingeschränkt über
->   `LOXONE_ALLOWED_HOSTS`).
+> - Adresse und Zugangsdaten des Miniservers stehen ausschliesslich als
+>   Umgebungsvariablen im Backend (`LOXONE_BASE_URL`, `LOXONE_USERNAME`,
+>   `LOXONE_PASSWORD`). Das Backend läuft im selben Netz wie der Miniserver.
+> - Die App kennt weder Adresse noch Zugangsdaten. Sie wählt nur Sensoren aus
+>   (`GET /api/loxone/sensors`) und liest Werte (`GET /api/loxone/temperatures`).
 > - Das Widget holt Sensorwerte über `/api/widget/timeline` mit dem Header
->   `X-Loxone-BaseURL`.
-> - Authentifizierung: HTTP Basic Auth mit Benutzername und Passwort.
+>   `X-Loxone-Sensor-UUIDs`.
+> - App und Widget authentifizieren sich am Backend mit einem Pre-Shared
+>   Secret (`Authorization: Bearer <API_TOKEN>`).
 >
 > Die folgenden Abschnitte zu Cloud DNS, Auto-Detection und Token-Auth
 > beschreiben den ursprünglichen Plan und sind nur noch historisch.
