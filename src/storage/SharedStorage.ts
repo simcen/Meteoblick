@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { APP_GROUP_ID, API_BASE_URL, POI_STORAGE_KEY, WEATHER_DATA_KEY, WIDGET_LAST_REFRESH_KEY, WIDGET_LOXONE_CONFIG_KEY, WIDGET_LOXONE_SENSOR_DATA_KEY, WIDGET_TIMELINE_CALLED_KEY, WIDGET_SNAPSHOT_WRITTEN_AT_KEY, THEME_PREFERENCE_KEY } from '../constants';
 import type { WeatherData } from '../types/weather';
 import type { POI } from '../types/poi';
+import { buildLoxoneBaseURL, type LoxoneProtocol } from '../api/loxone';
 
 export type ThemePreference = 'system' | 'light' | 'dark';
 
@@ -22,7 +23,7 @@ const POI_CACHE_KEY = 'meteoblick_poi_cache';
 // ─── Loxone multi-sensor types & migration helper ───────────────────
 //
 // Storage schema (multi-sensor):
-//   { cloudAddress, username, password, sensors: Sensor[], enabled }
+//   { host, protocol, username, password, sensors: Sensor[], enabled }
 //
 // Each Sensor:
 //   { uuid, name, showInApp, showInWidget, order }
@@ -41,7 +42,8 @@ type Sensor = {
 };
 
 export type LoxoneConfig = {
-  cloudAddress: string;
+  host: string; // IP or DNS name of the Miniserver, optional ":port"
+  protocol: LoxoneProtocol;
   username: string;
   password: string;
   sensors: Sensor[];
@@ -204,7 +206,8 @@ async getLoxoneConfig(): Promise<LoxoneConfig | null> {
     // Migration: legacy single-sensor → array shape.
     if (isLegacyShape(raw)) {
       const migrated: LoxoneConfig = {
-        cloudAddress: raw.cloudAddress,
+        host: '',
+        protocol: 'http',
         username: raw.username,
         password: raw.password,
         enabled: raw.enabled,
@@ -219,6 +222,15 @@ async getLoxoneConfig(): Promise<LoxoneConfig | null> {
         ],
       };
       // Persist migrated shape; from now on the legacy branch is skipped.
+      await AsyncStorage.setItem('loxone_config', JSON.stringify(migrated));
+      return migrated;
+    }
+
+    // Migration: cloud serial number → network address. The address has to
+    // be entered once; credentials and sensors are kept.
+    if (typeof raw.host !== 'string') {
+      const { cloudAddress: _cloudAddress, ...rest } = raw;
+      const migrated: LoxoneConfig = { ...rest, host: '', protocol: 'http' };
       await AsyncStorage.setItem('loxone_config', JSON.stringify(migrated));
       return migrated;
     }
@@ -250,7 +262,8 @@ async setLoxoneConfig(config: LoxoneConfig): Promise<void> {
       // snapshots opportunistically (foreground / BG fetch / pull-to-refresh)
       // as a fallback for the widget when iOS throttles timeline refreshes.
       const widgetConfig = {
-        cloudAddress: config.cloudAddress,
+        // Empty string signals "no address yet" → widget skips Loxone.
+        baseUrl: config.host ? buildLoxoneBaseURL(config.protocol, config.host) : '',
         username: config.username,
         password: config.password,
         showInWidgetSensorUuids: config.sensors
@@ -375,7 +388,7 @@ async reorderSensors(orderedUuids: string[]): Promise<LoxoneConfig | null> {
    * Only populated when Loxone is enabled — see setLoxoneConfig above.
    */
   async getLoxoneConfigForWidget(): Promise<{
-    cloudAddress: string;
+    baseUrl: string;
     username: string;
     password: string;
     temperatureSensorUUID?: string;

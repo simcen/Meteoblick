@@ -2,38 +2,63 @@
  * LoxoneConnectionScreen — connection edit form.
  *
  * Reached by tapping the Connection summary card in LoxoneConfigScreen.
- * Owns the Loxone credentials (cloud SNR / username / password) and the
- * master enable toggle. Sensors are NOT managed here — they're managed
- * via the sensor list in LoxoneConfigScreen.
+ * Owns the Loxone connection (Miniserver address + protocol, username,
+ * password). Sensors are NOT managed here — they're managed via the
+ * sensor list in LoxoneConfigScreen.
+ *
+ * Inputs are native SwiftUI controls via @expo/ui.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   StyleSheet,
   Alert,
   ScrollView,
 } from 'react-native';
+import {
+  Host,
+  Picker,
+  SecureField,
+  Text as NativeText,
+  TextField,
+  useNativeState,
+} from '@expo/ui/swift-ui';
+import {
+  autocorrectionDisabled,
+  disabled,
+  keyboardType,
+  pickerStyle,
+  tag,
+  textContentType,
+  textInputAutocapitalization,
+} from '@expo/ui/swift-ui/modifiers';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { SharedStorage } from '../storage/SharedStorage';
-import { LoxoneAPI } from '../api/loxone';
+import { LoxoneAPI, parseLoxoneAddress, type LoxoneProtocol } from '../api/loxone';
 import { useWeather } from '../providers/WeatherContext';
 import { Button } from '../components/Button';
 import { LiquidGlassCloseButton } from '../components/LiquidGlassCloseButton';
 import { Typography, Spacing, Layout } from '../constants/designSystem';
 import { useColors } from '../hooks/useColors';
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function LoxoneConnectionScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const colors = useColors();
+  const { effectiveScheme } = useTheme();
   const { refresh: refreshWeather } = useWeather();
 
-  const [cloudAddress, setCloudAddress] = useState('504F94A1874F');
+  const [host, setHost] = useState('');
+  const [protocol, setProtocol] = useState<LoxoneProtocol>('http');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  // Native field contents — written to when a stored config is loaded or reset.
+  const hostText = useNativeState('');
+  const usernameText = useNativeState('');
+  const passwordText = useNativeState('');
   const [enabled, setEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -82,7 +107,6 @@ export default function LoxoneConnectionScreen() {
           marginTop: Spacing.md,
         },
         input: {
-          ...Typography.body,
           backgroundColor: colors.fill.tertiary,
           borderRadius: Layout.radius.md,
           borderWidth: Layout.border.normal,
@@ -90,8 +114,8 @@ export default function LoxoneConnectionScreen() {
           paddingHorizontal: Spacing.md,
           paddingVertical: Spacing.sm,
           marginBottom: Spacing.md,
-          color: colors.label.primary,
         },
+        protocolPicker: { marginBottom: Spacing.md },
         toggleRow: {
           flexDirection: 'row',
           justifyContent: 'space-between',
@@ -114,41 +138,65 @@ export default function LoxoneConnectionScreen() {
   const loadConfig = useCallback(async () => {
     const config = await SharedStorage.getLoxoneConfig();
     if (config) {
-      setCloudAddress(config.cloudAddress);
+      setHost(config.host);
+      setProtocol(config.protocol);
       setUsername(config.username);
       setPassword(config.password);
       setEnabled(config.enabled);
+      hostText.set(config.host);
+      usernameText.set(config.username);
+      passwordText.set(config.password);
     }
     setHasLoadedOnce(true);
-  }, []);
+  }, [hostText, usernameText, passwordText]);
+
+  // Validates the address field. A pasted URL ("https://host/…") also sets
+  // the protocol switch and is reduced to the host.
+  const resolveAddress = useCallback(() => {
+    const parsed = parseLoxoneAddress(host);
+    if (!parsed) {
+      Alert.alert('Fehler', 'Bitte eine gültige Adresse eingeben (IP oder DNS-Name, optional mit Port).');
+      return null;
+    }
+    const resolved = { host: parsed.host, protocol: parsed.protocol ?? protocol };
+    if (resolved.host !== host) {
+      setHost(resolved.host);
+      hostText.set(resolved.host);
+    }
+    setProtocol(resolved.protocol);
+    return resolved;
+  }, [host, protocol, hostText]);
 
   const testConnection = useCallback(async () => {
     if (!username || !password) {
       Alert.alert('Fehler', 'Bitte Username und Passwort eingeben');
       return;
     }
+    const address = resolveAddress();
+    if (!address) return;
     setTesting(true);
     try {
-      const api = new LoxoneAPI({ cloudAddress, username, password });
-      const connection = await api.getConnection();
-      const connectionType = connection.type === 'local' ? 'Lokal' : 'Cloud';
+      const api = new LoxoneAPI({ ...address, username, password });
+      const connection = await api.testConnection();
       Alert.alert(
         'Verbindung erfolgreich',
-        `Typ: ${connectionType}\nURL: ${connection.baseURL}\n\nDie Verbindung zum Loxone Miniserver funktioniert!`,
+        `URL: ${connection.baseURL}\n\nDer Miniserver ist unter dieser Adresse erreichbar.`,
       );
     } catch (error: any) {
       Alert.alert('Verbindung fehlgeschlagen', error.message || 'Unbekannter Fehler');
     } finally {
       setTesting(false);
     }
-  }, [cloudAddress, username, password]);
+  }, [resolveAddress, username, password]);
 
   const saveConfig = useCallback(async () => {
+    const address = resolveAddress();
+    if (!address) return;
     setLoading(true);
     try {
       const existing = await SharedStorage.getLoxoneConfig();
       await SharedStorage.setLoxoneConfig({
-        cloudAddress,
+        ...address,
         username,
         password,
         enabled: existing?.enabled ?? false,
@@ -161,7 +209,7 @@ export default function LoxoneConnectionScreen() {
     } finally {
       setLoading(false);
     }
-  }, [cloudAddress, username, password, refreshWeather]);
+  }, [resolveAddress, username, password, refreshWeather]);
 
   const deleteConfig = useCallback(() => {
     Alert.alert(
@@ -175,16 +223,20 @@ export default function LoxoneConnectionScreen() {
           onPress: async () => {
             await SharedStorage.deleteLoxoneConfig();
             await refreshWeather();
-            setCloudAddress('504F94A1874F');
+            setHost('');
+            setProtocol('http');
             setUsername('');
             setPassword('');
             setEnabled(false);
+            hostText.set('');
+            usernameText.set('');
+            passwordText.set('');
             Alert.alert('Gelöscht', 'Loxone Konfiguration wurde gelöscht.');
           },
         },
       ],
     );
-  }, [refreshWeather]);
+  }, [refreshWeather, hostText, usernameText, passwordText]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
@@ -202,48 +254,75 @@ export default function LoxoneConnectionScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Cloud-Verbindung</Text>
+          <Text style={styles.sectionTitle}>Miniserver</Text>
 
-          <Text style={styles.inputLabel}>Cloud-Adresse (SNR)</Text>
-          <TextInput
-            style={styles.input}
-            value={cloudAddress}
-            onChangeText={setCloudAddress}
-            placeholder="z.B. 504F94A1874F"
-            placeholderTextColor={colors.label.tertiary}
-            autoCapitalize="characters"
-            editable={!loading}
-          />
+          <Text style={styles.inputLabel}>Adresse</Text>
+          <View style={styles.input}>
+            <Host matchContents={{ vertical: true }} colorScheme={effectiveScheme}>
+              <TextField
+                text={hostText}
+                onTextChange={setHost}
+                placeholder="192.168.1.47 oder miniserver.lan"
+                modifiers={[
+                  keyboardType('url'),
+                  textContentType('URL'),
+                  textInputAutocapitalization('never'),
+                  autocorrectionDisabled(),
+                  disabled(loading),
+                ]}
+              />
+            </Host>
+          </View>
+
+          <Text style={styles.inputLabel}>Protokoll</Text>
+          <Host
+            matchContents={{ vertical: true }}
+            colorScheme={effectiveScheme}
+            style={styles.protocolPicker}
+          >
+            <Picker
+              selection={protocol}
+              onSelectionChange={setProtocol}
+              modifiers={[pickerStyle('segmented'), disabled(loading)]}
+            >
+              <NativeText modifiers={[tag('http')]}>HTTP</NativeText>
+              <NativeText modifiers={[tag('https')]}>HTTPS</NativeText>
+            </Picker>
+          </Host>
 
           <Text style={styles.inputLabel}>Benutzername</Text>
-          <TextInput
-            style={styles.input}
-            value={username}
-            onChangeText={setUsername}
-            placeholder="Miniserver Benutzer"
-            placeholderTextColor={colors.label.tertiary}
-            autoCapitalize="none"
-            autoCorrect={false}
-            editable={!loading}
-          />
+          <View style={styles.input}>
+            <Host matchContents={{ vertical: true }} colorScheme={effectiveScheme}>
+              <TextField
+                text={usernameText}
+                onTextChange={setUsername}
+                placeholder="Miniserver Benutzer"
+                modifiers={[
+                  textContentType('username'),
+                  textInputAutocapitalization('never'),
+                  autocorrectionDisabled(),
+                  disabled(loading),
+                ]}
+              />
+            </Host>
+          </View>
 
           <Text style={styles.inputLabel}>Passwort</Text>
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Miniserver Passwort"
-            placeholderTextColor={colors.label.tertiary}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-            editable={!loading}
-          />
+          <View style={styles.input}>
+            <Host matchContents={{ vertical: true }} colorScheme={effectiveScheme}>
+              <SecureField
+                text={passwordText}
+                onTextChange={setPassword}
+                placeholder="Miniserver Passwort"
+                modifiers={[textContentType('password'), disabled(loading)]}
+              />
+            </Host>
+          </View>
 
           <Button
             title="Verbindung testen"
             onPress={testConnection}
-            disabled={!username || !password || testing}
+            disabled={!host || !username || !password || testing}
             loading={testing}
           />
         </View>

@@ -6,7 +6,7 @@
  * here we exercise pure logic.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { parseSensorUuids, fetchLoxoneMultiSensor } from '../widget.js';
 
 describe('widget timeline helpers', () => {
@@ -38,7 +38,7 @@ describe('widget timeline helpers', () => {
   describe('fetchLoxoneMultiSensor', () => {
     it('returns empty result when credentials are missing', async () => {
       const r1 = await fetchLoxoneMultiSensor({
-        snr: 'CAFE',
+        baseURL: 'http://192.168.1.47',
         credentials: undefined,
         multiHeader: 'a,b',
         legacySingleUuid: undefined,
@@ -47,7 +47,7 @@ describe('widget timeline helpers', () => {
       expect(r1.sensors).toBeUndefined();
 
       const r2 = await fetchLoxoneMultiSensor({
-        snr: undefined,
+        baseURL: undefined,
         credentials: 'Basic xxx',
         multiHeader: 'a',
         legacySingleUuid: undefined,
@@ -58,7 +58,7 @@ describe('widget timeline helpers', () => {
 
     it('returns empty result when no UUIDs are provided', async () => {
       const r = await fetchLoxoneMultiSensor({
-        snr: 'CAFE',
+        baseURL: 'http://192.168.1.47',
         credentials: 'Basic xxx',
         multiHeader: undefined,
         legacySingleUuid: undefined,
@@ -67,20 +67,28 @@ describe('widget timeline helpers', () => {
       expect(r.sensors).toBeUndefined();
     });
 
-    it('returns empty sensors array when all fetches fail and no cache', async () => {
-      // The function uses real fetchLoxoneTemperature which would network-call.
-      // For unit test isolation, we just verify the "no sensors" path —
-      // a full success/multi-fetch test belongs in integration tests where
-      // global.fetch is mocked.
+    it('returns empty result when the base URL is not in the local network', async () => {
       const r = await fetchLoxoneMultiSensor({
-        snr: 'CAFE',
+        baseURL: 'https://example.com',
+        credentials: 'Basic xxx',
+        multiHeader: 'a',
+        legacySingleUuid: undefined,
+      });
+      expect(r.primary).toBeNull();
+      expect(r.sensors).toBeUndefined();
+    });
+
+    it('returns empty sensors array when all fetches fail and no cache', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('unreachable')));
+      const r = await fetchLoxoneMultiSensor({
+        baseURL: 'http://192.168.1.47',
         credentials: 'Basic xxx',
         multiHeader: 'a,b',
         legacySingleUuid: undefined,
       });
-      // r.sensors is undefined OR empty array (depends on fetch results).
-      // We only assert shape here.
-      expect(r.primary === null || typeof r.primary === 'object').toBe(true);
+      vi.unstubAllGlobals();
+      expect(r.primary).toBeNull();
+      expect(r.sensors).toEqual([]);
     });
   });
 });

@@ -39,7 +39,7 @@ TaskManager.defineTask(WEATHER_BACKGROUND_TASK, async () => {
 
   const loxoneConfig = await SharedStorage.getLoxoneConfig();
   const appSensors = loxoneConfig?.sensors.filter((s) => s.showInApp) ?? [];
-  if (loxoneConfig?.enabled && appSensors.length > 0) {
+  if (loxoneConfig?.enabled && loxoneConfig.host && appSensors.length > 0) {
     const now = new Date().toISOString();
     try {
       const api = new LoxoneAPI(loxoneConfig);

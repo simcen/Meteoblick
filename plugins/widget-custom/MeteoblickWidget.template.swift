@@ -9,7 +9,8 @@ import SwiftUI
 // ask the backend for.
 
 struct WidgetConfig: Codable {
-    let cloudAddress: String
+    // Miniserver base URL ("http://192.168.1.47"); nil/empty = no address yet.
+    let baseUrl: String?
     let username: String
     let password: String
     let showInWidgetSensorUuids: [String]?
@@ -84,15 +85,15 @@ struct TimelineSmartHomeSensor: Codable {
 
 actor WidgetTimelineClient {
     private let baseURL: String
-    private let loxoneSnr: String?
+    private let loxoneBaseURL: String?
     private let loxoneCredentials: String?  // "Basic <base64>"
     private let loxoneSensorUuids: [String]?
 
     private static let requestTimeout: TimeInterval = 6
 
-    init(baseURL: String, loxoneSnr: String?, loxoneCredentials: String?, loxoneSensorUuids: [String]?) {
+    init(baseURL: String, loxoneBaseURL: String?, loxoneCredentials: String?, loxoneSensorUuids: [String]?) {
         self.baseURL = baseURL
-        self.loxoneSnr = loxoneSnr
+        self.loxoneBaseURL = loxoneBaseURL
         self.loxoneCredentials = loxoneCredentials
         self.loxoneSensorUuids = loxoneSensorUuids
     }
@@ -111,8 +112,8 @@ actor WidgetTimelineClient {
         // Pass Loxone credentials + sensor UUIDs as headers. Backend uses
         // them to fetch the multi-sensor payload server-side and returns
         // it consolidated in smartHomeSensors[].
-        if let snr = loxoneSnr, !snr.isEmpty {
-            request.setValue(snr, forHTTPHeaderField: "X-Loxone-SNR")
+        if let loxoneBase = loxoneBaseURL, !loxoneBase.isEmpty {
+            request.setValue(loxoneBase, forHTTPHeaderField: "X-Loxone-BaseURL")
         }
         if let creds = loxoneCredentials, !creds.isEmpty {
             request.setValue(creds, forHTTPHeaderField: "X-Loxone-Credentials")
@@ -269,14 +270,16 @@ struct MeteoblickProvider: TimelineProvider {
         guard let config = WidgetConfigStore.read() else { return false }
 
         // Single consolidated request. Backend fetches MeteoSwiss +
-        // multi-sensor Loxone on our behalf; we don't talk to Loxone
-        // Cloud directly from the widget.
+        // multi-sensor Loxone on our behalf; we don't talk to the
+        // Miniserver directly from the widget.
         guard let poiId = config.poiId, !poiId.isEmpty,
               let base = config.apiBaseUrl, !base.isEmpty else { return false }
         let client = WidgetTimelineClient(
             baseURL: base,
-            loxoneSnr: config.cloudAddress,
-            loxoneCredentials: config.password.isEmpty ? nil : "Basic \(config.password)",
+            loxoneBaseURL: config.baseUrl,
+            loxoneCredentials: config.password.isEmpty
+                ? nil
+                : "Basic \(Data("\(config.username):\(config.password)".utf8).base64EncodedString())",
             loxoneSensorUuids: config.showInWidgetSensorUuids
         )
         guard let timeline = await client.fetchTimeline(poiId: poiId) else { return false }

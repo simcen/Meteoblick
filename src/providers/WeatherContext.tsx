@@ -219,12 +219,12 @@ export function WeatherProvider({ children }: WeatherProviderProps) {
       enabled: loxoneConfig?.enabled,
       sensorCount: loxoneConfig?.sensors.filter((s) => s.showInApp).length ?? 0,
       username: loxoneConfig?.username,
-      cloudAddress: loxoneConfig?.cloudAddress,
+      host: loxoneConfig?.host,
     });
     // Phase 3: fetch all showInApp sensors in parallel.
     const configuredAppSensors = loxoneConfig?.sensors.filter((s) => s.showInApp) ?? [];
     appSensors.push(...configuredAppSensors.map((s) => ({ uuid: s.uuid, name: s.name, order: s.order })));
-    if (loxoneConfig?.enabled && configuredAppSensors.length > 0) {
+    if (loxoneConfig?.enabled && loxoneConfig.host && configuredAppSensors.length > 0) {
       const uuids = configuredAppSensors.map((s) => s.uuid);
       const now = new Date().toISOString();
       try {
