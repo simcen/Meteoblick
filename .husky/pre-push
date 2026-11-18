@@ -2,10 +2,20 @@
 
 echo "🧪 Running full test suite before push..."
 
-# Run all tests (frontend + backend + e2e)
-pnpm test:all || {
+# Unit tests (frontend + backend)
+pnpm test && pnpm test:backend || {
   echo "❌ Tests failed - push aborted"
   exit 1
 }
+
+# E2E tests start the backend locally, which needs the local Postgres
+if nc -z localhost 5432 2>/dev/null; then
+  pnpm test:e2e || {
+    echo "❌ E2E tests failed - push aborted"
+    exit 1
+  }
+else
+  echo "⚠️  Local Postgres (localhost:5432) not reachable - skipping E2E tests"
+fi
 
 echo "✅ All tests passed - proceeding with push"
