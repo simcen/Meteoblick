@@ -1,4 +1,3 @@
-import * as Crypto from 'expo-crypto';
 import { LoxoneAPI, parseLoxoneAddress } from '../loxone';
 
 // Mock fetch globally
@@ -35,12 +34,6 @@ describe('LoxoneAPI', () => {
     username: 'testuser',
     password: 'testpass',
   };
-
-  function mockApiKeyResponse(apiKey = 'the-api-key') {
-    (global.fetch as jest.Mock).mockResolvedValueOnce(
-      fakeResponse({ LL: { value: apiKey, Code: '200' } }),
-    );
-  }
 
   function mockValueResponse(value: string) {
     (global.fetch as jest.Mock).mockResolvedValueOnce(
@@ -82,29 +75,38 @@ describe('LoxoneAPI', () => {
   });
 
   describe('testConnection', () => {
-    it('should reach the Miniserver through the proxy', async () => {
-      mockApiKeyResponse();
+    it('should check an authenticated endpoint through the proxy', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        fakeResponse({ LL: { control: 'dev/sps/LoxAPPversion3', value: '2026-01-01 12:00:00', Code: '200' } }),
+      );
 
       const api = new LoxoneAPI(mockConfig);
       const connection = await api.testConnection();
 
       expect(connection.baseURL).toBe('http://192.168.1.47');
       const call = (global.fetch as jest.Mock).mock.calls[0];
-      expect(call[0]).toBe(`${PROXY_BASE}/jdev/cfg/apiKey`);
+      expect(call[0]).toBe(`${PROXY_BASE}/jdev/sps/LoxAPPversion3`);
       expect(call[1].headers['X-Loxone-BaseURL']).toBe('http://192.168.1.47');
+      expect(atob(call[1].headers['X-Loxone-Auth'].replace('Basic ', ''))).toBe('testuser:testpass');
+    });
+
+    it('should report wrong credentials', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce(fakeResponse('', false, 401));
+
+      const api = new LoxoneAPI(mockConfig);
+      await expect(api.testConnection()).rejects.toThrow('Benutzername oder Passwort falsch.');
     });
 
     it('should fail when the Miniserver is not reachable', async () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce(fakeResponse('', false, 502));
 
       const api = new LoxoneAPI(mockConfig);
-      await expect(api.testConnection()).rejects.toThrow('Failed to fetch API key: 502');
+      await expect(api.testConnection()).rejects.toThrow('Miniserver nicht erreichbar (Status 502).');
     });
   });
 
   describe('getTemperature', () => {
-    it('should fetch API key, then read value with password', async () => {
-      mockApiKeyResponse('the-api-key');
+    it('should read the value with the password through the proxy', async () => {
       mockValueResponse('22.5');
 
       const api = new LoxoneAPI(mockConfig);
@@ -113,19 +115,11 @@ describe('LoxoneAPI', () => {
       expect(temperature).toBe(22.5);
 
       const calls = (global.fetch as jest.Mock).mock.calls;
-      // apiKey + temperature read = 2 calls
-      expect(calls).toHaveLength(2);
-
-      // API-key request used password in X-Loxone-Auth header, routed through proxy
-      const apiKeyCall = calls[0];
-      expect(apiKeyCall[0]).toBe(`${PROXY_BASE}/jdev/cfg/apiKey`);
-      expect(apiKeyCall[1].headers['X-Loxone-BaseURL']).toBe('http://192.168.1.47');
-      const apiKeyAuth = atob(apiKeyCall[1].headers['X-Loxone-Auth'].replace('Basic ', ''));
-      expect(apiKeyAuth).toBe('testuser:testpass');
+      expect(calls).toHaveLength(1);
 
       // Temperature read uses password too (Miniserver accepts raw password for
       // /jdev/sps/io/{uuid} but not the SHA-256 hash — verified empirically).
-      const valueCall = calls[1];
+      const valueCall = calls[0];
       expect(valueCall[0]).toBe(`${PROXY_BASE}/jdev/sps/io/15beed5b-01ab-d81d-ffff2b06d5b9c660`);
       expect(valueCall[1].headers['X-Loxone-BaseURL']).toBe('http://192.168.1.47');
       const valueAuth = atob(valueCall[1].headers['X-Loxone-Auth'].replace('Basic ', ''));
@@ -133,7 +127,6 @@ describe('LoxoneAPI', () => {
     });
 
     it('should throw error for invalid temperature value', async () => {
-      mockApiKeyResponse();
       mockValueResponse('invalid');
 
       const api = new LoxoneAPI(mockConfig);
@@ -144,7 +137,6 @@ describe('LoxoneAPI', () => {
     });
 
     it('should base64-encode special characters in username/password', async () => {
-      mockApiKeyResponse();
       mockValueResponse('20.0');
 
       const api = new LoxoneAPI({
@@ -154,9 +146,8 @@ describe('LoxoneAPI', () => {
       });
       await api.getTemperature('some-uuid');
 
-      const apiKeyCall = (global.fetch as jest.Mock).mock.calls[0];
-      expect(apiKeyCall[0]).toBe(`${PROXY_BASE}/jdev/cfg/apiKey`);
-      expect(atob(apiKeyCall[1].headers['X-Loxone-Auth'].replace('Basic ', ''))).toBe(
+      const valueCall = (global.fetch as jest.Mock).mock.calls[0];
+      expect(atob(valueCall[1].headers['X-Loxone-Auth'].replace('Basic ', ''))).toBe(
         'user@home:p@ss:w0rd!',
       );
     });
@@ -164,7 +155,6 @@ describe('LoxoneAPI', () => {
 
   describe('getStructureFile', () => {
     it('should fetch and return structure file via proxy', async () => {
-      mockApiKeyResponse();
 
       const mockStructureFile = {
         lastModified: '2026-01-01 12:00:00',
@@ -200,13 +190,12 @@ describe('LoxoneAPI', () => {
       expect(structureFile.controls).toHaveProperty('15beed5b-01ab-d81d-ffff2b06d5b9c660');
 
       // Structure-file request is routed through proxy
-      const structCall = (global.fetch as jest.Mock).mock.calls[1];
+      const structCall = (global.fetch as jest.Mock).mock.calls[0];
       expect(structCall[0]).toBe(`${PROXY_BASE}/data/LoxAPP3.json`);
       expect(structCall[1].headers['X-Loxone-BaseURL']).toBe('http://192.168.1.47');
     });
 
     it('should throw a clear error on empty body (not "JSON Parse error: Unexpected end of input")', async () => {
-      mockApiKeyResponse();
       (global.fetch as jest.Mock).mockResolvedValueOnce(
         fakeResponse('', true, 200), // empty body
       );
@@ -216,7 +205,6 @@ describe('LoxoneAPI', () => {
     });
 
     it('should throw a clear error on malformed JSON body', async () => {
-      mockApiKeyResponse();
       (global.fetch as jest.Mock).mockResolvedValueOnce(
         fakeResponse('not json at all', true, 200),
       );
@@ -227,23 +215,14 @@ describe('LoxoneAPI', () => {
   });
 
   describe('resetConnection', () => {
-    it('should clear cached connection and force re-auth', async () => {
-      mockApiKeyResponse('k1');
-      mockValueResponse('20');
-      // Second round after reset
-      mockApiKeyResponse('k2');
-      mockValueResponse('21');
-
+    it('should clear the cached connection', async () => {
       const api = new LoxoneAPI(mockConfig);
-      const t1 = await api.getTemperature('x');
+      const first = await api.getConnection();
       api.resetConnection();
-      const t2 = await api.getTemperature('x');
+      const second = await api.getConnection();
 
-      expect(t1).toBe(20);
-      expect(t2).toBe(21);
-
-      // Functional check: t1 and t2 differ, proving re-auth + new API key
-      // ('k1' vs 'k2') was used after reset.
+      expect(second).toEqual(first);
+      expect(second).not.toBe(first);
     });
   });
 
