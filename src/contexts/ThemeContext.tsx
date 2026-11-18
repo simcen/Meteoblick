@@ -69,6 +69,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Native UI (tab bar, keyboard, alerts) follows the window's interface
+  // style, not our palette — keep it in line with the preference.
+  useEffect(() => {
+    Appearance.setColorScheme(preference === 'system' ? 'unspecified' : preference);
+  }, [preference]);
+
   const setPreference = useCallback((p: ThemePreference) => {
     setPreferenceState(p);
     // Fire-and-forget: persistence errors are logged inside setThemePreference.
