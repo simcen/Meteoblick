@@ -19,6 +19,9 @@ plutil -replace CFBundleVersion -string "$NEW_BUILD" ios/ExpoWidgetsTarget/Info.
 # (GENERATE_INFOPLIST_FILE), so this setting overrides the plist value above
 perl -pi -e "s/CURRENT_PROJECT_VERSION = \d+;/CURRENT_PROJECT_VERSION = $NEW_BUILD;/" ios/Meteoblick.xcodeproj/project.pbxproj
 
+# Update app.json — `expo prebuild` regenerates ios/ from this value
+perl -pi -e "s/\"buildNumber\": \"\d+\"/\"buildNumber\": \"$NEW_BUILD\"/" app.json
+
 # Update BUILD_NUMBER in constants.ts with timestamp-based format
 TIMESTAMP=$(date +%y%m%d-%H%M)
 CONST_FILE="src/constants.ts"
