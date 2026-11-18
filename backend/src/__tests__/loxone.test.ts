@@ -1,95 +1,169 @@
 /**
- * Unit tests for the Loxone proxy's base URL check: the proxy is
- * unauthenticated and must only reach hosts in the backend's own LAN.
+ * Unit tests for the Loxone Miniserver client and the /loxone endpoints.
+ * The Miniserver is replaced by a stubbed global fetch.
  */
 
-import { describe, it, expect, afterEach, vi } from 'vitest';
-import { isAllowedBaseURL, loxoneRouter } from '../loxone.js';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { getTemperature, getTemperatureSensors, isLoxoneUuid } from '../services/loxone.js';
+import { loxoneRouter } from '../loxone.js';
 
-describe('isAllowedBaseURL', () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
+const UUID = '15beed5b-01ab-d81d-ffff2b06d5b9c660';
+const UUID_2 = '1b4bd480-0352-6c00-ffff0fb3607cf0ae';
 
-  it('allows private IPv4 addresses over http and https, with optional port', async () => {
-    expect(await isAllowedBaseURL('http://192.168.1.47')).toBe(true);
-    expect(await isAllowedBaseURL('https://10.0.0.5')).toBe(true);
-    expect(await isAllowedBaseURL('http://172.16.3.5:8080')).toBe(true);
-  });
+function stubMiniserver(...responses: Response[]) {
+  const fetchMock = vi.fn();
+  for (const r of responses) fetchMock.mockResolvedValueOnce(r);
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
 
-  it('rejects public, loopback and link-local addresses', async () => {
-    expect(await isAllowedBaseURL('http://8.8.8.8')).toBe(false);
-    expect(await isAllowedBaseURL('http://172.32.0.1')).toBe(false);
-    expect(await isAllowedBaseURL('http://127.0.0.1')).toBe(false);
-    expect(await isAllowedBaseURL('http://169.254.169.254')).toBe(false);
-    expect(await isAllowedBaseURL('http://[::1]')).toBe(false);
-  });
+const valueResponse = (value: string) =>
+  new Response(JSON.stringify({ LL: { control: 'dev/sps/io', value, Code: '200' } }));
 
-  it('rejects host names that do not resolve to a private address', async () => {
-    expect(await isAllowedBaseURL('http://localhost')).toBe(false);
-    expect(await isAllowedBaseURL('http://does-not-exist.invalid')).toBe(false);
-  });
+beforeEach(() => {
+  vi.stubEnv('LOXONE_BASE_URL', 'http://192.168.1.47/');
+  vi.stubEnv('LOXONE_USERNAME', 'user@home');
+  vi.stubEnv('LOXONE_PASSWORD', 'p@ss:w0rd!');
+});
 
-  it('rejects anything that is not a bare http(s) origin', async () => {
-    expect(await isAllowedBaseURL('ftp://192.168.1.47')).toBe(false);
-    expect(await isAllowedBaseURL('http://192.168.1.47/jdev')).toBe(false);
-    expect(await isAllowedBaseURL('http://user:pw@192.168.1.47')).toBe(false);
-    expect(await isAllowedBaseURL('http://192.168.1.47?x=1')).toBe(false);
-    expect(await isAllowedBaseURL('192.168.1.47')).toBe(false);
-  });
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+});
 
-  it('normalizes alternative IPv4 notations before checking', async () => {
-    // 0x7f.1 is 127.0.0.1 — must not slip through as a "name".
-    expect(await isAllowedBaseURL('http://0x7f.1')).toBe(false);
-    expect(await isAllowedBaseURL('http://3232235823')).toBe(true); // 192.168.1.47
-  });
-
-  it('only allows the hosts listed in LOXONE_ALLOWED_HOSTS when set', async () => {
-    vi.stubEnv('LOXONE_ALLOWED_HOSTS', '192.168.1.47, Miniserver.lan:8443');
-
-    expect(await isAllowedBaseURL('http://192.168.1.47')).toBe(true);
-    expect(await isAllowedBaseURL('http://192.168.1.48')).toBe(false);
-    expect(await isAllowedBaseURL('http://192.168.1.47:8080')).toBe(false);
-    // Listed, but still has to be a private address
-    vi.stubEnv('LOXONE_ALLOWED_HOSTS', '8.8.8.8');
-    expect(await isAllowedBaseURL('http://8.8.8.8')).toBe(false);
+describe('isLoxoneUuid', () => {
+  it('accepts Loxone UUIDs and rejects anything that could alter the request path', () => {
+    expect(isLoxoneUuid(UUID)).toBe(true);
+    expect(isLoxoneUuid('../../jdev/sys/reboot')).toBe(false);
+    expect(isLoxoneUuid(`${UUID}/../x`)).toBe(false);
+    expect(isLoxoneUuid('')).toBe(false);
   });
 });
 
-describe('loxone proxy redirects', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
+describe('getTemperature', () => {
+  it('reads the value from the configured Miniserver with Basic auth', async () => {
+    const fetchMock = stubMiniserver(valueResponse('22.5'));
+
+    expect(await getTemperature(UUID)).toBe(22.5);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(`http://192.168.1.47/jdev/sps/io/${UUID}`);
+    const auth = Buffer.from(init.headers.Authorization.replace('Basic ', ''), 'base64').toString();
+    expect(auth).toBe('user@home:p@ss:w0rd!');
   });
 
-  const request = () =>
-    loxoneRouter.request('/api/loxone/jdev/sps/io/abc', {
-      headers: { 'X-Loxone-BaseURL': 'http://192.168.1.47', 'X-Loxone-Auth': 'Basic xxx' },
-    });
+  it('refuses UUIDs that are not Loxone UUIDs without calling the Miniserver', async () => {
+    const fetchMock = stubMiniserver();
 
-  it('follows a redirect within the local network with the credentials', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(null, { status: 307, headers: { location: 'https://192.168.1.47/jdev/sps/io/abc' } }))
-      .mockResolvedValueOnce(new Response('{"LL":{"value":"21.5"}}', { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    const res = await request();
-
-    expect(res.status).toBe(200);
-    expect(fetchMock.mock.calls[1][0]).toBe('https://192.168.1.47/jdev/sps/io/abc');
-    expect(fetchMock.mock.calls[1][1].headers.Authorization).toBe('Basic xxx');
+    await expect(getTemperature('../../jdev/sys/reboot')).rejects.toThrow('Invalid sensor UUID');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('refuses a redirect that leaves the local network', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: 'https://example.com/steal' } }));
-    vi.stubGlobal('fetch', fetchMock);
+  it('fails when Loxone is not configured', async () => {
+    vi.stubEnv('LOXONE_PASSWORD', '');
+    const fetchMock = stubMiniserver();
 
-    const res = await request();
+    await expect(getTemperature(UUID)).rejects.toThrow('LOXONE_BASE_URL');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('fails on a non-numeric value and on an error status', async () => {
+    stubMiniserver(valueResponse('invalid'), new Response('', { status: 401 }));
+
+    await expect(getTemperature(UUID)).rejects.toThrow('Invalid temperature value');
+    await expect(getTemperature(UUID)).rejects.toThrow('Miniserver responded with 401');
+  });
+
+  it('follows a redirect on the same host with the credentials', async () => {
+    const fetchMock = stubMiniserver(
+      new Response(null, { status: 307, headers: { location: `https://192.168.1.47/jdev/sps/io/${UUID}` } }),
+      valueResponse('21.5'),
+    );
+
+    expect(await getTemperature(UUID)).toBe(21.5);
+    expect(fetchMock.mock.calls[1][0]).toBe(`https://192.168.1.47/jdev/sps/io/${UUID}`);
+    expect(fetchMock.mock.calls[1][1].headers.Authorization).toMatch(/^Basic /);
+  });
+
+  it('never sends the credentials to another host', async () => {
+    const fetchMock = stubMiniserver(
+      new Response(null, { status: 302, headers: { location: 'https://example.com/steal' } }),
+    );
+
+    await expect(getTemperature(UUID)).rejects.toThrow('redirected to another host');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('getTemperatureSensors', () => {
+  it('extracts temperature sensors with room and category names from the structure file', async () => {
+    const fetchMock = stubMiniserver(
+      new Response(
+        JSON.stringify({
+          controls: {
+            [UUID]: { name: 'Aussentemperatur', type: 'InfoOnlyAnalog', room: 'r1', cat: 'c1' },
+            [UUID_2]: { name: 'Wohnzimmer', type: 'IRoomControllerV2' },
+            'aaaaaaaa-0000-0000-0000000000000000': { name: 'Licht', type: 'Switch' },
+          },
+          rooms: { r1: { name: 'Garten' } },
+          cats: { c1: { name: 'Klima' } },
+        }),
+      ),
+    );
+
+    expect(await getTemperatureSensors()).toEqual([
+      { uuid: UUID, name: 'Aussentemperatur', room: 'Garten', category: 'Klima', type: 'InfoOnlyAnalog' },
+      { uuid: UUID_2, name: 'Wohnzimmer', room: 'Unknown', category: 'Unknown', type: 'IRoomControllerV2' },
+    ]);
+    expect(fetchMock.mock.calls[0][0]).toBe('http://192.168.1.47/data/LoxAPP3.json');
+  });
+});
+
+describe('GET /loxone/sensors', () => {
+  it('returns 503 when Loxone is not configured', async () => {
+    vi.stubEnv('LOXONE_BASE_URL', '');
+
+    const res = await loxoneRouter.request('/loxone/sensors');
+
+    expect(res.status).toBe(503);
+    expect(((await res.json()) as { error: string }).error).toBe('LOXONE_NOT_CONFIGURED');
+  });
+
+  it('returns 502 when the Miniserver cannot be reached', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fetch failed')));
+
+    const res = await loxoneRouter.request('/loxone/sensors');
 
     expect(res.status).toBe(502);
-    expect(((await res.json()) as { error: string }).error).toBe('invalid_redirect');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('GET /loxone/temperatures', () => {
+  it('returns the readings and leaves out sensors that cannot be read', async () => {
+    stubMiniserver(valueResponse('22.5'), new Response('', { status: 500 }));
+
+    const res = await loxoneRouter.request(`/loxone/temperatures?uuids=${UUID},${UUID_2}`);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { readings: { uuid: string; temperature: number }[] };
+    expect(body.readings).toHaveLength(1);
+    expect(body.readings[0]).toMatchObject({ uuid: UUID, temperature: 22.5 });
+  });
+
+  it('rejects invalid UUIDs', async () => {
+    const fetchMock = stubMiniserver();
+
+    const res = await loxoneRouter.request('/loxone/temperatures?uuids=..%2F..%2Fjdev');
+
+    expect(res.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 503 when Loxone is not configured', async () => {
+    vi.stubEnv('LOXONE_USERNAME', '');
+
+    const res = await loxoneRouter.request(`/loxone/temperatures?uuids=${UUID}`);
+
+    expect(res.status).toBe(503);
   });
 });

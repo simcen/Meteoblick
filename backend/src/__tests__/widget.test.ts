@@ -6,7 +6,7 @@
  * here we exercise pure logic.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { parseSensorUuids, fetchLoxoneMultiSensor } from '../widget.js';
 
 describe('widget timeline helpers', () => {
@@ -36,59 +36,44 @@ describe('widget timeline helpers', () => {
   });
 
   describe('fetchLoxoneMultiSensor', () => {
-    it('returns empty result when credentials are missing', async () => {
-      const r1 = await fetchLoxoneMultiSensor({
-        baseURL: 'http://192.168.1.47',
-        credentials: undefined,
-        multiHeader: 'a,b',
-        legacySingleUuid: undefined,
-      });
+    const UUID = '15beed5b-01ab-d81d-ffff2b06d5b9c660';
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      vi.unstubAllGlobals();
+    });
+
+    it('returns empty result when no valid UUIDs are provided', async () => {
+      const r1 = await fetchLoxoneMultiSensor({ multiHeader: undefined, legacySingleUuid: undefined });
       expect(r1.primary).toBeNull();
       expect(r1.sensors).toBeUndefined();
 
-      const r2 = await fetchLoxoneMultiSensor({
-        baseURL: undefined,
-        credentials: 'Basic xxx',
-        multiHeader: 'a',
-        legacySingleUuid: undefined,
-      });
+      const r2 = await fetchLoxoneMultiSensor({ multiHeader: '../../jdev,not-a-uuid', legacySingleUuid: undefined });
       expect(r2.primary).toBeNull();
       expect(r2.sensors).toBeUndefined();
     });
 
-    it('returns empty result when no UUIDs are provided', async () => {
-      const r = await fetchLoxoneMultiSensor({
-        baseURL: 'http://192.168.1.47',
-        credentials: 'Basic xxx',
-        multiHeader: undefined,
-        legacySingleUuid: undefined,
-      });
-      expect(r.primary).toBeNull();
-      expect(r.sensors).toBeUndefined();
-    });
-
-    it('returns empty result when the base URL is not in the local network', async () => {
-      const r = await fetchLoxoneMultiSensor({
-        baseURL: 'https://example.com',
-        credentials: 'Basic xxx',
-        multiHeader: 'a',
-        legacySingleUuid: undefined,
-      });
-      expect(r.primary).toBeNull();
-      expect(r.sensors).toBeUndefined();
-    });
-
-    it('returns empty sensors array when all fetches fail and no cache', async () => {
-      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('unreachable')));
-      const r = await fetchLoxoneMultiSensor({
-        baseURL: 'http://192.168.1.47',
-        credentials: 'Basic xxx',
-        multiHeader: 'a,b',
-        legacySingleUuid: undefined,
-      });
-      vi.unstubAllGlobals();
+    it('returns empty sensors array when Loxone is not configured', async () => {
+      vi.stubEnv('LOXONE_BASE_URL', '');
+      const r = await fetchLoxoneMultiSensor({ multiHeader: UUID, legacySingleUuid: undefined });
       expect(r.primary).toBeNull();
       expect(r.sensors).toEqual([]);
+    });
+
+    it('reads the sensors from the configured Miniserver', async () => {
+      vi.stubEnv('LOXONE_BASE_URL', 'http://192.168.1.47');
+      vi.stubEnv('LOXONE_USERNAME', 'u');
+      vi.stubEnv('LOXONE_PASSWORD', 'p');
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(new Response(JSON.stringify({ LL: { value: '19.4' } }))),
+      );
+
+      const r = await fetchLoxoneMultiSensor({ multiHeader: UUID, legacySingleUuid: undefined });
+
+      expect(r.primary?.temperature).toBe(19.4);
+      expect(r.sensors).toHaveLength(1);
+      expect(r.sensors?.[0]).toMatchObject({ uuid: UUID, temperature: 19.4 });
     });
   });
 });
