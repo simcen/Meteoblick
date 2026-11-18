@@ -1,7 +1,7 @@
 /**
  * SmartHomeScreen — read-only view of the Loxone smart home sensor.
  *
- * Shows the current sensor temperature, sensor name, cloud SNR and last
+ * Shows the current sensor temperature, sensor name, Miniserver address and last
  * update timestamp. The Loxone enable/disable toggle stays here for
  * quick on/off without opening the full configuration screen.
  *
@@ -117,7 +117,7 @@ export default function SmartHomeScreen() {
   );
 
   const [enabled, setEnabled] = useState(false);
-  const [cloudAddress, setCloudAddress] = useState<string | null>(null);
+  const [address, setAddress] = useState<string | null>(null);
   const [appSensors, setAppSensors] = useState<
     { uuid: string; name: string; order: number }[]
   >([]);
@@ -131,7 +131,7 @@ export default function SmartHomeScreen() {
         const config = await SharedStorage.getLoxoneConfig();
         if (cancelled || !config) return;
         setEnabled(config.enabled);
-        setCloudAddress(config.cloudAddress);
+        setAddress(config.host ? `${config.protocol}://${config.host}` : null);
         setAppSensors(
           config.sensors
             .filter((s) => s.showInApp)
@@ -152,7 +152,7 @@ export default function SmartHomeScreen() {
       const config = await SharedStorage.getLoxoneConfig();
       if (!config) return;
       setEnabled(config.enabled);
-      setCloudAddress(config.cloudAddress);
+      setAddress(config.host ? `${config.protocol}://${config.host}` : null);
       setAppSensors(
         config.sensors
           .filter((s) => s.showInApp)
@@ -192,7 +192,7 @@ export default function SmartHomeScreen() {
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>Loxone ist nicht konfiguriert</Text>
             <Text style={styles.emptyBody}>
-              Lege Cloud-Adresse, Zugangsdaten und einen Temperatursensor fest,
+              Lege Adresse, Zugangsdaten und einen Temperatursensor fest,
               um die Aussentemperatur im Widget anzuzeigen.
             </Text>
             <Button
@@ -251,7 +251,7 @@ export default function SmartHomeScreen() {
             {/* Connection details */}
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Verbindung</Text>
-              <Row label="Cloud SNR" value={cloudAddress ?? '—'} />
+              <Row label="Adresse" value={address ?? '—'} />
               <Row label="Status" value={enabled ? 'Aktiviert' : 'Deaktiviert'} />
               <TouchableOpacity
                 onPress={() => (navigation.getParent() as any)?.navigate('Loxone')}

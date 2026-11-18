@@ -2,7 +2,7 @@
  * LoxoneConfigScreen — full Loxone configuration UI.
  *
  * Reached from Settings > Smart Home. Owns:
- * - Connection credentials (cloud SNR, username, password)
+ * - Connection credentials (Miniserver address, username, password)
  * - Sensor list: ordered, per-sensor flags (in-app / in-widget), rename, delete
  * - Master enable/disable toggle
  *
@@ -26,7 +26,7 @@ import DraggableFlatList, {
   RenderItemParams,
   ScaleDecorator,
 } from 'react-native-draggable-flatlist';
-import { Swipeable } from 'react-native-gesture-handler';
+import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { SharedStorage } from '../storage/SharedStorage';
@@ -52,10 +52,10 @@ export default function LoxoneConfigScreen() {
   const { refresh: refreshWeather } = useWeather();
 
   const [enabled, setEnabled] = useState(false);
-  const [cloudAddress, setCloudAddress] = useState('504F94A1874F');
+  const [host, setHost] = useState('');
   const [sensors, setSensors] = useState<Sensor[]>([]);
   // Connection edit lives in LoxoneConnectionScreen (separate modal).
-  // Here we just show a summary card with the SNR + chevron to navigate.
+  // Here we just show a summary card with a chevron to navigate.
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   // Phase 5+: Lock Screen circular widget metric — 'weather' (default)
@@ -323,7 +323,7 @@ export default function LoxoneConfigScreen() {
     const config = await SharedStorage.getLoxoneConfig();
     if (config) {
       setEnabled(config.enabled);
-      setCloudAddress(config.cloudAddress);
+      setHost(config.host);
       setSensors(config.sensors);
       setLockScreenCircular(config.lockScreenCircular ?? 'weather');
     }
@@ -415,7 +415,7 @@ export default function LoxoneConfigScreen() {
   // ─── Sensor picker (Phase 2.2) ──────────────────────────────────
   const [pickerVisible, setPickerVisible] = useState(false);
   const openPicker = () => {
-    if (!cloudAddress) {
+    if (!host) {
       Alert.alert('Fehler', 'Bitte zuerst eine Verbindung konfigurieren.');
       return;
     }
@@ -620,7 +620,7 @@ export default function LoxoneConfigScreen() {
           <View style={styles.infoSection}>
             <Text style={styles.infoTitle}>Hinweise:</Text>
             <Text style={styles.infoText}>
-              • Verbindung oben konfigurieren (Cloud-SNR, Zugangsdaten){'\n'}
+              • Verbindung oben konfigurieren (Adresse, Zugangsdaten){'\n'}
               • App-Schalter: zeigt den Sensor in der Smart-Home-Tab{'\n'}
               • Widget-Schalter: zeigt den Sensor im iOS-Widget
             </Text>
@@ -642,7 +642,7 @@ export default function LoxoneConfigScreen() {
 /**
  * LoxoneSensorPicker — modal that scans the configured Loxone Miniserver
  * for temperature sensors and lets the user add one to the configured list.
- * Reads its own credentials + cloud address from SharedStorage so the
+ * Reads its own credentials + Miniserver address from SharedStorage so the
  * parent doesn't need to forward them. Already-configured UUIDs are
  * filtered out so the user can't add duplicates.
  *
@@ -679,7 +679,8 @@ function LoxoneSensorPicker({
           return;
         }
         const api = new LoxoneAPI({
-          cloudAddress: cfg.cloudAddress,
+          host: cfg.host,
+          protocol: cfg.protocol,
           username: cfg.username,
           password: cfg.password,
         });

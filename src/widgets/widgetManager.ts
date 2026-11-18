@@ -15,6 +15,7 @@ import meteoblickWidget from '../../widgets/MeteoblickWidget';
 import SharedGroupPreferences from 'react-native-shared-group-preferences';
 import { APP_GROUP_ID, WIDGET_LAST_REFRESH_KEY, API_BASE_URL } from '../constants';
 import { SharedStorage } from '../storage/SharedStorage';
+import { buildLoxoneBaseURL } from '../api/loxone';
 import { BUILD_NUMBER } from '../constants';
 
 // Widget props type
@@ -106,8 +107,8 @@ export async function fetchAndWriteWidgetTimeline(): Promise<void> {
     const headers: Record<string, string> = {};
     const loxoneConfig = await SharedStorage.getLoxoneConfig();
     const widgetSensorUuids = loxoneConfig?.sensors.filter((s) => s.showInWidget).map((s) => s.uuid) ?? [];
-    if (loxoneConfig?.enabled && widgetSensorUuids.length > 0) {
-      headers['X-Loxone-SNR'] = loxoneConfig.cloudAddress;
+    if (loxoneConfig?.enabled && loxoneConfig.host && widgetSensorUuids.length > 0) {
+      headers['X-Loxone-BaseURL'] = buildLoxoneBaseURL(loxoneConfig.protocol, loxoneConfig.host);
       headers['X-Loxone-Sensor-UUIDs'] = widgetSensorUuids.join(',');
       const credentials = btoa(`${loxoneConfig.username}:${loxoneConfig.password}`);
       headers['X-Loxone-Credentials'] = `Basic ${credentials}`;

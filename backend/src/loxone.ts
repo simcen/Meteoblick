@@ -1,14 +1,12 @@
 /**
  * Loxone Proxy Router
  *
- * The iOS app runs in an environment where CFNetwork/PAC proxy handling
- * cancels direct connections to user-defined hosts (manual local IP, Loxone
- * Cloud HTTPS). This proxy lets the app reach the Miniserver through the
- * backend, which is not subject to the simulator's PAC issue.
+ * The backend runs in the same network as the Miniserver, so the app
+ * reaches the Miniserver through this proxy instead of connecting itself.
  *
  * App sends:
  *   - X-Loxone-BaseURL: full base URL (e.g. "http://192.168.1.47" or
- *                        "https://connect.loxonecloud.com/504F94A1874F")
+ *                        "https://miniserver.lan:8443")
  *   - X-Loxone-Auth:    full Authorization header value (e.g. "Basic dXNlcjpwYXNz")
  *   - X-Loxone-Method:  optional override (default = request method)
  *
@@ -18,14 +16,11 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { Agent, setGlobalDispatcher } from 'undici';
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 
 const LOXONE_TIMEOUT_MS = 90000; // matches structure file timeout in app
-const ALLOWED_BASEURL_PATTERNS = [
-  /^https:\/\/connect\.loxonecloud\.com\/[A-F0-9]{12}$/i,
-  /^https:\/\/dns\.loxonecloud\.com$/i,
-  /^https:\/\/[a-z0-9.-]+\.dns\.loxonecloud\.com$/i,
-  /^http:\/\/(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})(?::\d{1,5})?$/,
-];
+const PRIVATE_IPV4 = /^(?:10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.)/;
 
 // Bypass system PAC proxy for Loxone Miniserver requests — the macOS PAC
 // resolver is unable to reach hosts on the local LAN (e.g. 172.16.3.5) and
@@ -37,8 +32,26 @@ setGlobalDispatcher(
   }),
 );
 
-function isAllowedBaseURL(url: string): boolean {
-  return ALLOWED_BASEURL_PATTERNS.some((re) => re.test(url));
+// The proxy is unauthenticated, so it must only reach hosts on the
+// backend's own LAN: http(s)://<private IPv4 or a name resolving to one>[:port].
+export async function isAllowedBaseURL(url: string): Promise<boolean> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+  if (parsed.pathname !== '/' || parsed.search || parsed.hash || parsed.username || parsed.password) {
+    return false;
+  }
+  if (isIP(parsed.hostname)) return PRIVATE_IPV4.test(parsed.hostname);
+  try {
+    const { address } = await lookup(parsed.hostname, { family: 4 });
+    return PRIVATE_IPV4.test(address);
+  } catch {
+    return false;
+  }
 }
 
 async function proxyToLoxone(c: Context): Promise<Response> {
@@ -55,7 +68,7 @@ async function proxyToLoxone(c: Context): Promise<Response> {
   if (!auth && !isProbe) {
     return c.json({ error: 'missing_header', message: 'X-Loxone-Auth header is required' }, 400);
   }
-  if (!isAllowedBaseURL(baseURL)) {
+  if (!(await isAllowedBaseURL(baseURL))) {
     return c.json({ error: 'invalid_baseurl', message: 'X-Loxone-BaseURL is not an allowed Loxone host' }, 400);
   }
 

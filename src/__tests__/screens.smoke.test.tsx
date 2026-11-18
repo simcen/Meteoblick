@@ -100,6 +100,45 @@ jest.mock('react-native-gesture-handler', () => {
   };
 });
 
+jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () => {
+  const React = require('react');
+  return {
+    __esModule: true,
+    default: (props: Record<string, unknown>) =>
+      React.createElement('Swipeable', props, props.children),
+  };
+});
+
+// Native SwiftUI inputs (LoxoneConnectionScreen) need a native runtime.
+jest.mock('@expo/ui/swift-ui', () => {
+  const React = require('react');
+  const passthrough = (name: string) => (props: Record<string, unknown>) =>
+    React.createElement(name, null, props.children);
+  return {
+    __esModule: true,
+    Host: passthrough('Host'),
+    Picker: passthrough('Picker'),
+    SecureField: passthrough('SecureField'),
+    Text: passthrough('NativeText'),
+    TextField: passthrough('TextField'),
+    useNativeState: (initial: unknown) => ({ value: initial, get: () => initial, set: () => {} }),
+  };
+});
+
+jest.mock('@expo/ui/swift-ui/modifiers', () => {
+  const modifier = () => ({});
+  return {
+    __esModule: true,
+    autocorrectionDisabled: modifier,
+    disabled: modifier,
+    keyboardType: modifier,
+    pickerStyle: modifier,
+    tag: modifier,
+    textContentType: modifier,
+    textInputAutocapitalization: modifier,
+  };
+});
+
 jest.mock('react-native-draggable-flatlist', () => {
   const React = require('react');
   const Stub = (props: { children?: React.ReactNode }) =>
@@ -245,6 +284,7 @@ import SmartHomeScreen from '../screens/SmartHomeScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import OrteScreen from '../screens/OrteScreen';
 import LoxoneConfigScreen from '../screens/LoxoneConfigScreen';
+import LoxoneConnectionScreen from '../screens/LoxoneConnectionScreen';
 import DebugScreen from '../screens/DebugScreen';
 import { WeatherProvider, useWeather } from '../providers/WeatherContext';
 
@@ -254,6 +294,7 @@ const SCREENS: [string, React.ComponentType<unknown>][] = [
   ['SettingsScreen', SettingsScreen],
   ['OrteScreen', OrteScreen],
   ['LoxoneConfigScreen', LoxoneConfigScreen],
+  ['LoxoneConnectionScreen', LoxoneConnectionScreen],
   ['DebugScreen', DebugScreen],
 ];
 

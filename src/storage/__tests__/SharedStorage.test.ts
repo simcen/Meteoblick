@@ -115,7 +115,8 @@ describe('SharedStorage', () => {
 
     it('should store and retrieve a new-shape Loxone config', async () => {
       const cfg = {
-        cloudAddress: '504F94A1874F',
+        host: '192.168.1.47',
+        protocol: 'http',
         username: 'admin',
         password: 'pw',
         enabled: true,
@@ -165,6 +166,55 @@ describe('SharedStorage', () => {
       expect(persisted.sensors[0].uuid).toBe('legacy-uuid-123');
     });
 
+    it('should migrate a cloud config: drops the serial number, keeps credentials and sensors', async () => {
+      const cloud = {
+        cloudAddress: '504F94A1874F',
+        username: 'admin',
+        password: 'pw',
+        enabled: true,
+        lockScreenCircular: 'aa-1',
+        sensors: [
+          { uuid: 'aa-1', name: 'Aussen', showInApp: true, showInWidget: true, order: 0 },
+        ],
+      };
+      (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(JSON.stringify(cloud));
+
+      const result = await SharedStorage.getLoxoneConfig();
+      expect(result).toEqual({
+        host: '',
+        protocol: 'http',
+        username: 'admin',
+        password: 'pw',
+        enabled: true,
+        lockScreenCircular: 'aa-1',
+        sensors: cloud.sensors,
+      });
+      // Persisted, so the migration runs only once
+      const persisted = JSON.parse((AsyncStorage.setItem as jest.Mock).mock.calls[0][1]);
+      expect(persisted).toEqual(result);
+    });
+
+    it('should mirror the Miniserver base URL to the widget config', async () => {
+      await SharedStorage.setLoxoneConfig({
+        host: 'miniserver.lan:8443',
+        protocol: 'https',
+        username: 'admin',
+        password: 'pw',
+        enabled: true,
+        sensors: [
+          { uuid: 'aa-1', name: 'Aussen', showInApp: true, showInWidget: true, order: 0 },
+        ],
+      });
+
+      const mirrorCall = (SharedGroupPreferences.setItem as jest.Mock).mock.calls.find(
+        (c) => c[0] === 'loxone_config_widget',
+      );
+      const mirrored = JSON.parse(mirrorCall[1]);
+      expect(mirrored.baseUrl).toBe('https://miniserver.lan:8443');
+      expect(mirrored.username).toBe('admin');
+      expect(mirrored.showInWidgetSensorUuids).toEqual(['aa-1']);
+    });
+
     it('should use UUID as name fallback when migrating without temperatureSensorName', async () => {
       const legacy = {
         cloudAddress: 'CAFE',
@@ -180,7 +230,7 @@ describe('SharedStorage', () => {
 
     it('addSensor: appends a sensor with order = max+1', async () => {
       const cfg = {
-        cloudAddress: 'CAFE', username: 'u', password: 'p', enabled: true,
+        host: '192.168.1.47', protocol: 'http', username: 'u', password: 'p', enabled: true,
         sensors: [
           { uuid: 'a', name: 'A', showInApp: true, showInWidget: true, order: 0 },
           { uuid: 'b', name: 'B', showInApp: true, showInWidget: true, order: 1 },
@@ -198,7 +248,7 @@ describe('SharedStorage', () => {
 
     it('removeSensor: drops + re-numbers orders', async () => {
       const cfg = {
-        cloudAddress: 'CAFE', username: 'u', password: 'p', enabled: true,
+        host: '192.168.1.47', protocol: 'http', username: 'u', password: 'p', enabled: true,
         sensors: [
           { uuid: 'a', name: 'A', showInApp: true, showInWidget: true, order: 0 },
           { uuid: 'b', name: 'B', showInApp: true, showInWidget: true, order: 1 },
@@ -214,7 +264,7 @@ describe('SharedStorage', () => {
 
     it('updateSensor: applies partial changes', async () => {
       const cfg = {
-        cloudAddress: 'CAFE', username: 'u', password: 'p', enabled: true,
+        host: '192.168.1.47', protocol: 'http', username: 'u', password: 'p', enabled: true,
         sensors: [
           { uuid: 'a', name: 'A', showInApp: true, showInWidget: true, order: 0 },
         ],
@@ -230,7 +280,7 @@ describe('SharedStorage', () => {
 
     it('reorderSensors: applies new order', async () => {
       const cfg = {
-        cloudAddress: 'CAFE', username: 'u', password: 'p', enabled: true,
+        host: '192.168.1.47', protocol: 'http', username: 'u', password: 'p', enabled: true,
         sensors: [
           { uuid: 'a', name: 'A', showInApp: true, showInWidget: true, order: 0 },
           { uuid: 'b', name: 'B', showInApp: true, showInWidget: true, order: 1 },
@@ -245,7 +295,7 @@ describe('SharedStorage', () => {
 
     it('reorderSensors: throws on unknown UUID', async () => {
       const cfg = {
-        cloudAddress: 'CAFE', username: 'u', password: 'p', enabled: true,
+        host: '192.168.1.47', protocol: 'http', username: 'u', password: 'p', enabled: true,
         sensors: [
           { uuid: 'a', name: 'A', showInApp: true, showInWidget: true, order: 0 },
         ],

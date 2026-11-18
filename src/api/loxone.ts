@@ -2,17 +2,14 @@
  * Loxone Miniserver API Client
  *
  * Supports:
- * - Auto-detection of local vs cloud connection
+ * - Connection to a Miniserver by network address (IP or DNS name) over
+ *   http or https, routed through the backend proxy — the backend runs in
+ *   the same network as the Miniserver
  * - Structure File parsing for sensor discovery
  * - Temperature sensor value reading
- * - Token-based authentication (SHA-256 of API key + password)
  *
- * Auth strategy:
- * - Local: HTTP Basic Auth via Authorization header
- * - Cloud: HTTP Basic Auth via URL userinfo (HTTPS reverse proxy at
- *   connect.loxonecloud.com does not forward Authorization headers)
- * - After initial /jdev/cfg/apiKey exchange, the password is replaced
- *   by a SHA-256 hash, so it only travels over the wire once.
+ * Auth strategy: HTTP Basic Auth via Authorization header (forwarded by
+ * the proxy).
  *
  * Reference:
  * - /Users/siba5/Development/_projects/Inside-The-Loxone-Miniserver/
@@ -24,23 +21,38 @@ import { API_BASE_URL } from '../constants';
 
 const LOXONE_PROXY_BASE = `${API_BASE_URL}/api/loxone`;
 
+export type LoxoneProtocol = 'http' | 'https';
+
 export interface LoxoneConfig {
-  cloudAddress: string;        // Serial Number (SNR), e.g. "504F94A1874F"
+  host: string;                // IP or DNS name, optional ":port", e.g. "192.168.1.47"
+  protocol: LoxoneProtocol;
   username: string;
   password: string;
   temperatureSensorUUID?: string; // Selected sensor UUID
 }
 
-export interface LoxoneDNSResponse {
-  Code: number;
-  ip: string;
-  port: number;
-  portOpen: boolean;
-  httpsStatus: number;
-  snr: string;
-  version: string;
-  localIP?: string;
-  localPort?: number;
+export interface LoxoneConnection {
+  baseURL: string;
+}
+
+export function buildLoxoneBaseURL(protocol: LoxoneProtocol, host: string): string {
+  return `${protocol}://${host}`;
+}
+
+/**
+ * Normalize what the user typed into the address field. Accepts a bare
+ * host ("192.168.1.47", "miniserver.lan:8080") or a pasted URL — in which
+ * case the protocol is returned too and any path is dropped.
+ * Returns null when the input is not a valid host.
+ */
+export function parseLoxoneAddress(
+  input: string,
+): { host: string; protocol?: LoxoneProtocol } | null {
+  const match = input.trim().match(/^(?:(https?):\/\/)?([^/]*)/i);
+  const host = match?.[2] ?? '';
+  if (!/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:\d{1,5})?$/i.test(host)) return null;
+  const protocol = match?.[1]?.toLowerCase() as LoxoneProtocol | undefined;
+  return protocol ? { host, protocol } : { host };
 }
 
 export interface LoxoneStructureFile {
@@ -98,10 +110,8 @@ export interface LoxoneApiKeyResponse {
   };
 }
 
-const CLOUD_PREFIX = 'https://connect.loxonecloud.com/';
 const TEMPERATURE_TIMEOUT_MS = 15000;
 const STRUCTURE_FILE_TIMEOUT_MS = 90000;
-const DNS_TIMEOUT_MS = 10000;
 
 /**
  * Parse a Response as JSON, with a clear error on empty or malformed
@@ -126,7 +136,6 @@ async function parseJsonOrThrow<T>(response: Response, context: string): Promise
     );
   }
 }
-const REACHABILITY_TIMEOUT_MS = 3000;
 const AUTH_HEADER_TIMEOUT_MS = 10000;
 
 export class LoxoneAPI {
@@ -140,121 +149,26 @@ export class LoxoneAPI {
   }
 
   /**
-   * Get Miniserver connection (cloud only — local LAN IP support removed)
-   *
-   * All connections go through Loxone Cloud via the backend proxy. The proxy
-   * exists to work around iOS-simulator PAC-proxy issues and to centralize
-   * the auth flow. Previously this method also tried a local LAN IP, but
-   * that requires the backend to be on the same LAN as the Miniserver,
-   * which isn't the case in production (Heroku).
+   * Get the Miniserver connection from the configured address. All requests
+   * go through the backend proxy, which reaches the Miniserver locally.
    */
   async getConnection(): Promise<LoxoneConnection> {
-    if (this.connection) {
-      console.log('[Loxone] Using cached connection:', this.connection.type);
-      return this.connection;
+    if (!this.config.host) {
+      throw new LoxoneConnectionError('Keine Miniserver-Adresse konfiguriert.');
     }
-
-    console.log('[Loxone] Connecting via Loxone Cloud...');
-
-    // DNS query is still useful to (a) confirm the SNR is registered and
-    // (b) surface connection errors early with a meaningful message.
-    try {
-      const dnsInfo = await this.queryDNS();
-      console.log('[Loxone] DNS resolved, cloud IP:', dnsInfo.ip);
-    } catch (error: any) {
-      console.warn('[Loxone] DNS query failed (continuing with direct cloud URL):', error?.message ?? error);
+    if (!this.connection) {
+      this.connection = { baseURL: buildLoxoneBaseURL(this.config.protocol, this.config.host) };
     }
-
-    const cloudURL = `${CLOUD_PREFIX}${this.config.cloudAddress}`;
-    this.connection = { baseURL: cloudURL, type: 'cloud' };
-    console.log('☁️ [Loxone] Using cloud connection:', cloudURL);
     return this.connection;
   }
 
   /**
-   * Query Loxone Cloud DNS Service for Miniserver IP (via backend proxy).
-   * Marked as a probe so the backend forwards it without Auth — DNS queries
-   * must not count as login attempts on the Miniserver.
+   * Check that the Miniserver answers at the configured address.
    */
-  private async queryDNS(): Promise<LoxoneDNSResponse> {
-    const url = `${LOXONE_PROXY_BASE}/?getip&snr=${this.config.cloudAddress}&json=true`;
-
-    console.log('[Loxone] DNS query via proxy:', url);
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), DNS_TIMEOUT_MS);
-
-    try {
-      const response = await fetch(url, {
-        signal: controller.signal,
-        headers: this.getProxyHeaders('https://dns.loxonecloud.com', true),
-      });
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`Loxone DNS query failed: ${response.status} ${response.statusText}`);
-      }
-
-      const data: LoxoneDNSResponse = await parseJsonOrThrow<LoxoneDNSResponse>(response, 'DNS-Lookup');
-      console.log('[Loxone] DNS response code:', data.Code);
-
-      if (data.Code !== 200) {
-        throw new Error(`Loxone DNS returned error code: ${data.Code}`);
-      }
-
-      return data;
-    } catch (error: any) {
-      clearTimeout(timeoutId);
-
-      if (error.name === 'AbortError') {
-        throw new Error('Loxone DNS query timeout (10s). Keine Internetverbindung?');
-      }
-
-      throw error;
-    }
-  }
-
-  /**
-   * Network-level reachability check (via backend proxy). Marked as probe so
-   * the backend forwards it without Auth — we don't want reachability checks
-   * to count as failed login attempts on the Miniserver.
-   */
-  private async testReachable(baseURL: string, timeout: number): Promise<boolean> {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-      const response = await fetch(`${LOXONE_PROXY_BASE}/jdev/cfg/apiKey`, {
-        signal: controller.signal,
-        headers: this.getProxyHeaders(baseURL, true),
-      });
-      clearTimeout(timeoutId);
-      return response.status > 0;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Builds the standard proxy headers for a given base URL.
-   *
-   * - For authenticated requests (apiKey fetch, structure file, temperature):
-   *   sends X-Loxone-Auth with the raw password (used during the first
-   *   apiKey exchange).
-   * - For probes (DNS query, reachability check): passes `probe=true` to omit
-   *   X-Loxone-Auth entirely and set X-Loxone-Probe so the backend forwards
-   *   without Authorization — these calls must not count as failed login
-   *   attempts on the Miniserver.
-   */
-  private getProxyHeaders(baseURL: string, probe = false): HeadersInit {
-    const headers: Record<string, string> = {
-      'X-Loxone-BaseURL': baseURL,
-    };
-    if (probe) {
-      headers['X-Loxone-Probe'] = '1';
-    } else {
-      headers['X-Loxone-Auth'] = `Basic ${btoa(`${this.config.username}:${this.config.password}`)}`;
-    }
-    return headers;
+  async testConnection(): Promise<LoxoneConnection> {
+    const conn = await this.getConnection();
+    await this.ensureAuth();
+    return conn;
   }
 
   /**
@@ -299,7 +213,7 @@ export class LoxoneAPI {
       if (!rawText) {
         throw new Error(
           'Loxone lieferte eine leere Antwort für die Struktur-Datei. ' +
-            'Mögliche Ursachen: Cloud-Auth abgelaufen, Miniserver offline, ' +
+            'Mögliche Ursachen: Zugangsdaten falsch, Miniserver offline, ' +
             'oder Netzwerkproblem. Verbindung prüfen und erneut versuchen.',
         );
       }
@@ -325,7 +239,6 @@ export class LoxoneAPI {
           'Structure File Download Timeout (90s).\n\n' +
             'Dein Loxone Projekt ist sehr groß oder die Verbindung ist zu langsam.\n\n' +
             'Versuche:\n' +
-            '• Lokale Verbindung (WLAN) statt Cloud\n' +
             '• Miniserver neu starten'
         );
       }
@@ -462,7 +375,7 @@ export class LoxoneAPI {
         `${apiKey}:${this.config.password}`,
       );
 
-      // Loxone Cloud Miniserver expects UPPERCASE hex — verified empirically:
+      // The Miniserver expects UPPERCASE hex — verified empirically:
       // lowercase → 401 Unauthorized, uppercase → accepted (tested with curl).
       this.keyHash = hash.toUpperCase();
       console.log('[Loxone] Token authentication successful');

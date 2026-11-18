@@ -1,5 +1,5 @@
 import * as Crypto from 'expo-crypto';
-import { LoxoneAPI } from '../loxone';
+import { LoxoneAPI, parseLoxoneAddress } from '../loxone';
 
 // Mock fetch globally
 global.fetch = jest.fn();
@@ -30,25 +30,11 @@ const PROXY_BASE = 'http://test-backend/api/loxone';
 
 describe('LoxoneAPI', () => {
   const mockConfig = {
-    cloudAddress: '504F94A1874F',
+    host: '192.168.1.47',
+    protocol: 'http' as const,
     username: 'testuser',
     password: 'testpass',
   };
-
-  function mockCloudDNS(extra: Record<string, unknown> = {}) {
-    (global.fetch as jest.Mock).mockResolvedValueOnce(
-      fakeResponse({
-        Code: 200,
-        ip: '84.1.2.3',
-        port: 443,
-        portOpen: true,
-        httpsStatus: 200,
-        snr: '504F94A1874F',
-        version: '12.0.0.0',
-        ...extra,
-      }),
-    );
-  }
 
   function mockApiKeyResponse(apiKey = 'the-api-key') {
     (global.fetch as jest.Mock).mockResolvedValueOnce(
@@ -72,42 +58,52 @@ describe('LoxoneAPI', () => {
     jest.clearAllMocks();
   });
 
-  describe('getConnection (cloud only)', () => {
-    it('should return cloud connection', async () => {
-      mockCloudDNS();
-
+  describe('getConnection', () => {
+    it('should build the base URL from protocol and host without any request', async () => {
       const api = new LoxoneAPI(mockConfig);
       const connection = await api.getConnection();
 
-      expect(connection.type).toBe('cloud');
-      expect(connection.baseURL).toBe('https://connect.loxonecloud.com/504F94A1874F');
+      expect(connection.baseURL).toBe('http://192.168.1.47');
+      expect(global.fetch).not.toHaveBeenCalled();
     });
 
-    it('should route DNS query through backend proxy', async () => {
-      mockCloudDNS();
-
-      const api = new LoxoneAPI(mockConfig);
-      await api.getConnection();
-
-      const dnsCall = (global.fetch as jest.Mock).mock.calls[0];
-      expect(dnsCall[0]).toBe(`${PROXY_BASE}/?getip&snr=504F94A1874F&json=true`);
-      expect(dnsCall[1].headers['X-Loxone-BaseURL']).toBe('https://dns.loxonecloud.com');
-    });
-
-    it('should still use cloud when DNS query fails (graceful degradation)', async () => {
-      (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('DNS failed'));
-
-      const api = new LoxoneAPI(mockConfig);
+    it('should support https and DNS names with port', async () => {
+      const api = new LoxoneAPI({ ...mockConfig, host: 'miniserver.lan:8443', protocol: 'https' });
       const connection = await api.getConnection();
 
-      expect(connection.type).toBe('cloud');
-      expect(connection.baseURL).toBe('https://connect.loxonecloud.com/504F94A1874F');
+      expect(connection.baseURL).toBe('https://miniserver.lan:8443');
+    });
+
+    it('should throw when no address is configured', async () => {
+      const api = new LoxoneAPI({ ...mockConfig, host: '' });
+
+      await expect(api.getConnection()).rejects.toThrow('Keine Miniserver-Adresse');
+    });
+  });
+
+  describe('testConnection', () => {
+    it('should reach the Miniserver through the proxy', async () => {
+      mockApiKeyResponse();
+
+      const api = new LoxoneAPI(mockConfig);
+      const connection = await api.testConnection();
+
+      expect(connection.baseURL).toBe('http://192.168.1.47');
+      const call = (global.fetch as jest.Mock).mock.calls[0];
+      expect(call[0]).toBe(`${PROXY_BASE}/jdev/cfg/apiKey`);
+      expect(call[1].headers['X-Loxone-BaseURL']).toBe('http://192.168.1.47');
+    });
+
+    it('should fail when the Miniserver is not reachable', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce(fakeResponse('', false, 502));
+
+      const api = new LoxoneAPI(mockConfig);
+      await expect(api.testConnection()).rejects.toThrow('Failed to fetch API key: 502');
     });
   });
 
   describe('getTemperature', () => {
     it('should fetch API key, then read value with password', async () => {
-      mockCloudDNS();
       mockApiKeyResponse('the-api-key');
       mockValueResponse('22.5');
 
@@ -117,27 +113,26 @@ describe('LoxoneAPI', () => {
       expect(temperature).toBe(22.5);
 
       const calls = (global.fetch as jest.Mock).mock.calls;
-      // DNS query + apiKey + temperature read = 3 calls
-      expect(calls).toHaveLength(3);
+      // apiKey + temperature read = 2 calls
+      expect(calls).toHaveLength(2);
 
       // API-key request used password in X-Loxone-Auth header, routed through proxy
-      const apiKeyCall = calls[1];
+      const apiKeyCall = calls[0];
       expect(apiKeyCall[0]).toBe(`${PROXY_BASE}/jdev/cfg/apiKey`);
-      expect(apiKeyCall[1].headers['X-Loxone-BaseURL']).toBe('https://connect.loxonecloud.com/504F94A1874F');
+      expect(apiKeyCall[1].headers['X-Loxone-BaseURL']).toBe('http://192.168.1.47');
       const apiKeyAuth = atob(apiKeyCall[1].headers['X-Loxone-Auth'].replace('Basic ', ''));
       expect(apiKeyAuth).toBe('testuser:testpass');
 
       // Temperature read uses password too (Miniserver accepts raw password for
       // /jdev/sps/io/{uuid} but not the SHA-256 hash — verified empirically).
-      const valueCall = calls[2];
+      const valueCall = calls[1];
       expect(valueCall[0]).toBe(`${PROXY_BASE}/jdev/sps/io/15beed5b-01ab-d81d-ffff2b06d5b9c660`);
-      expect(valueCall[1].headers['X-Loxone-BaseURL']).toBe('https://connect.loxonecloud.com/504F94A1874F');
+      expect(valueCall[1].headers['X-Loxone-BaseURL']).toBe('http://192.168.1.47');
       const valueAuth = atob(valueCall[1].headers['X-Loxone-Auth'].replace('Basic ', ''));
       expect(valueAuth).toBe('testuser:testpass');
     });
 
     it('should throw error for invalid temperature value', async () => {
-      mockCloudDNS();
       mockApiKeyResponse();
       mockValueResponse('invalid');
 
@@ -149,7 +144,6 @@ describe('LoxoneAPI', () => {
     });
 
     it('should base64-encode special characters in username/password', async () => {
-      mockCloudDNS();
       mockApiKeyResponse();
       mockValueResponse('20.0');
 
@@ -160,7 +154,7 @@ describe('LoxoneAPI', () => {
       });
       await api.getTemperature('some-uuid');
 
-      const apiKeyCall = (global.fetch as jest.Mock).mock.calls[1];
+      const apiKeyCall = (global.fetch as jest.Mock).mock.calls[0];
       expect(apiKeyCall[0]).toBe(`${PROXY_BASE}/jdev/cfg/apiKey`);
       expect(atob(apiKeyCall[1].headers['X-Loxone-Auth'].replace('Basic ', ''))).toBe(
         'user@home:p@ss:w0rd!',
@@ -170,7 +164,6 @@ describe('LoxoneAPI', () => {
 
   describe('getStructureFile', () => {
     it('should fetch and return structure file via proxy', async () => {
-      mockCloudDNS();
       mockApiKeyResponse();
 
       const mockStructureFile = {
@@ -207,13 +200,12 @@ describe('LoxoneAPI', () => {
       expect(structureFile.controls).toHaveProperty('15beed5b-01ab-d81d-ffff2b06d5b9c660');
 
       // Structure-file request is routed through proxy
-      const structCall = (global.fetch as jest.Mock).mock.calls[2];
+      const structCall = (global.fetch as jest.Mock).mock.calls[1];
       expect(structCall[0]).toBe(`${PROXY_BASE}/data/LoxAPP3.json`);
-      expect(structCall[1].headers['X-Loxone-BaseURL']).toBe('https://connect.loxonecloud.com/504F94A1874F');
+      expect(structCall[1].headers['X-Loxone-BaseURL']).toBe('http://192.168.1.47');
     });
 
     it('should throw a clear error on empty body (not "JSON Parse error: Unexpected end of input")', async () => {
-      mockCloudDNS();
       mockApiKeyResponse();
       (global.fetch as jest.Mock).mockResolvedValueOnce(
         fakeResponse('', true, 200), // empty body
@@ -224,7 +216,6 @@ describe('LoxoneAPI', () => {
     });
 
     it('should throw a clear error on malformed JSON body', async () => {
-      mockCloudDNS();
       mockApiKeyResponse();
       (global.fetch as jest.Mock).mockResolvedValueOnce(
         fakeResponse('not json at all', true, 200),
@@ -237,11 +228,9 @@ describe('LoxoneAPI', () => {
 
   describe('resetConnection', () => {
     it('should clear cached connection and force re-auth', async () => {
-      mockCloudDNS();
       mockApiKeyResponse('k1');
       mockValueResponse('20');
       // Second round after reset
-      mockCloudDNS();
       mockApiKeyResponse('k2');
       mockValueResponse('21');
 
@@ -255,6 +244,33 @@ describe('LoxoneAPI', () => {
 
       // Functional check: t1 and t2 differ, proving re-auth + new API key
       // ('k1' vs 'k2') was used after reset.
+    });
+  });
+
+  describe('parseLoxoneAddress', () => {
+    it('accepts IPs and DNS names, with optional port', () => {
+      expect(parseLoxoneAddress('192.168.1.47')).toEqual({ host: '192.168.1.47' });
+      expect(parseLoxoneAddress(' miniserver.lan:8080 ')).toEqual({ host: 'miniserver.lan:8080' });
+    });
+
+    it('takes the protocol from a pasted URL and drops the path', () => {
+      expect(parseLoxoneAddress('https://miniserver.lan/')).toEqual({
+        host: 'miniserver.lan',
+        protocol: 'https',
+      });
+      expect(parseLoxoneAddress('HTTP://192.168.1.47/jdev/cfg/apiKey')).toEqual({
+        host: '192.168.1.47',
+        protocol: 'http',
+      });
+    });
+
+    it('rejects empty and malformed input', () => {
+      expect(parseLoxoneAddress('')).toBeNull();
+      expect(parseLoxoneAddress('   ')).toBeNull();
+      expect(parseLoxoneAddress('mini server')).toBeNull();
+      expect(parseLoxoneAddress('user@host')).toBeNull();
+      expect(parseLoxoneAddress('host:port')).toBeNull();
+      expect(parseLoxoneAddress('ftp://host')).toBeNull();
     });
   });
 });

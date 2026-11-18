@@ -364,8 +364,10 @@ export default function DebugScreen() {
             {loxoneConfig && (
               <>
                 <View style={styles.debugRow}>
-                  <Text style={styles.debugLabel}>Cloud SNR:</Text>
-                  <Text style={styles.debugValue}>{loxoneConfig.cloudAddress}</Text>
+                  <Text style={styles.debugLabel}>Adresse:</Text>
+                  <Text style={styles.debugValue}>
+                    {loxoneConfig.host ? `${loxoneConfig.protocol}://${loxoneConfig.host}` : '—'}
+                  </Text>
                 </View>
                 <View style={styles.debugRow}>
                   <Text style={styles.debugLabel}>Username:</Text>
