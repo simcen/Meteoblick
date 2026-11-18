@@ -15,7 +15,7 @@
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { Agent, setGlobalDispatcher } from 'undici';
+import { Agent, setGlobalDispatcher, type buildConnector } from 'undici';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
@@ -28,12 +28,14 @@ const PRIVATE_IPV4 = /^(?:10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.)/;
 // fall back to direct connection more aggressively. Use a no-proxy dispatcher.
 setGlobalDispatcher(
   new Agent({
-    connect: { family: 4 }, // IPv4 only — avoids IPv6/IPv4 fallback races
+    connect: { family: 4 } as buildConnector.BuildOptions, // IPv4 only — avoids IPv6/IPv4 fallback races
   }),
 );
 
 // The proxy is unauthenticated, so it must only reach hosts on the
 // backend's own LAN: http(s)://<private IPv4 or a name resolving to one>[:port].
+// LOXONE_ALLOWED_HOSTS (comma-separated host[:port]) narrows that down to
+// the listed Miniservers.
 export async function isAllowedBaseURL(url: string): Promise<boolean> {
   let parsed: URL;
   try {
@@ -45,6 +47,11 @@ export async function isAllowedBaseURL(url: string): Promise<boolean> {
   if (parsed.pathname !== '/' || parsed.search || parsed.hash || parsed.username || parsed.password) {
     return false;
   }
+  const allowedHosts = (process.env.LOXONE_ALLOWED_HOSTS ?? '')
+    .split(',')
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean);
+  if (allowedHosts.length > 0 && !allowedHosts.includes(parsed.host)) return false;
   if (isIP(parsed.hostname)) return PRIVATE_IPV4.test(parsed.hostname);
   try {
     const { address } = await lookup(parsed.hostname, { family: 4 });
@@ -123,6 +130,11 @@ async function proxyToLoxone(c: Context): Promise<Response> {
         if (!location) break;
         // Resolve relative Location
         currentURL = new URL(location, currentURL).toString();
+        // A redirect must not lead the proxy (and the credentials) elsewhere.
+        if (!(await isAllowedBaseURL(new URL(currentURL).origin))) {
+          clearTimeout(timeoutId);
+          return c.json({ error: 'invalid_redirect', message: 'Redirect target is not an allowed Loxone host' }, 502);
+        }
         hops++;
         if (hops > MAX_HOPS) {
           clearTimeout(timeoutId);
