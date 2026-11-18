@@ -13,7 +13,7 @@
     "ios": {
       "bundleIdentifier": "ch.meteoblick",
       "appleTeamId": "YE6GEBK456",
-      "buildNumber": "34",
+      "buildNumber": "35",
       "deploymentTarget": "26.0",
       "supportsTablet": true,
       "entitlements": {

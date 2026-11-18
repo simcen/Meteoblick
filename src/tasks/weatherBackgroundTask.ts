@@ -39,11 +39,10 @@ TaskManager.defineTask(WEATHER_BACKGROUND_TASK, async () => {
 
   const loxoneConfig = await SharedStorage.getLoxoneConfig();
   const appSensors = loxoneConfig?.sensors.filter((s) => s.showInApp) ?? [];
-  if (loxoneConfig?.enabled && loxoneConfig.host && appSensors.length > 0) {
+  if (loxoneConfig?.enabled && appSensors.length > 0) {
     const now = new Date().toISOString();
     try {
-      const api = new LoxoneAPI(loxoneConfig);
-      const results = await api.getTemperatures(appSensors.map((s) => s.uuid));
+      const results = await LoxoneAPI.getTemperatures(appSensors.map((s) => s.uuid));
       const readings = results.map((r) => ({ uuid: r.uuid, temperature: r.temperature, timestamp: now }));
       await SharedStorage.setLoxoneSensorData(readings);
       const primary = readings.find((r) => r.uuid === appSensors[0].uuid) ?? readings[0];

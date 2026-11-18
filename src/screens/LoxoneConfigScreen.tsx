@@ -2,7 +2,6 @@
  * LoxoneConfigScreen — full Loxone configuration UI.
  *
  * Reached from Settings > Smart Home. Owns:
- * - Connection credentials (Miniserver address, username, password)
  * - Sensor list: ordered, per-sensor flags (in-app / in-widget), rename, delete
  * - Master enable/disable toggle
  *
@@ -52,10 +51,7 @@ export default function LoxoneConfigScreen() {
   const { refresh: refreshWeather } = useWeather();
 
   const [enabled, setEnabled] = useState(false);
-  const [host, setHost] = useState('');
   const [sensors, setSensors] = useState<Sensor[]>([]);
-  // Connection edit lives in LoxoneConnectionScreen (separate modal).
-  // Here we just show a summary card with a chevron to navigate.
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   // Phase 5+: Lock Screen circular widget metric — 'weather' (default)
@@ -274,33 +270,6 @@ export default function LoxoneConfigScreen() {
           ...Typography.headline,
           color: colors.tint,
         },
-        // Connection summary card — navigates to LoxoneConnection on tap
-        connectionCardRow: {
-          flexDirection: 'row',
-          alignItems: 'center',
-          paddingVertical: Spacing.sm,
-        },
-        connectionCardMain: { flex: 1 },
-        connectionCardLabel: {
-          ...Typography.body,
-          color: colors.label.primary,
-        },
-        connectionSeparator: {
-          height: StyleSheet.hairlineWidth,
-          backgroundColor: colors.separator.nonOpaque,
-          marginVertical: Spacing.xs,
-        },
-        connectionCardActive: {
-          ...Typography.caption1,
-          color: colors.tint,
-          fontWeight: '600',
-          marginRight: Spacing.xs,
-        },
-        connectionCardChevron: {
-          fontSize: 24,
-          color: colors.label.tertiary,
-          marginLeft: Spacing.sm,
-        },
         actions: { marginTop: Spacing.lg, gap: Spacing.md },
         infoSection: {
           marginTop: Spacing.xl,
@@ -323,7 +292,6 @@ export default function LoxoneConfigScreen() {
     const config = await SharedStorage.getLoxoneConfig();
     if (config) {
       setEnabled(config.enabled);
-      setHost(config.host);
       setSensors(config.sensors);
       setLockScreenCircular(config.lockScreenCircular ?? 'weather');
     }
@@ -345,18 +313,13 @@ export default function LoxoneConfigScreen() {
     setEnabled(value);
     try {
       const existing = await SharedStorage.getLoxoneConfig();
-      if (!existing) return;
-      await SharedStorage.setLoxoneConfig({ ...existing, enabled: value });
+      await SharedStorage.setLoxoneConfig({ sensors: [], ...existing, enabled: value });
       if (!value) refreshWeather();
     } catch (error) {
       console.warn('[LoxoneConfig] Toggle persist failed:', error);
     }
   };
 
-  // ─── Navigation to connection edit screen ──────────────────────
-  const openConnectionEdit = () => {
-    (navigation as any).navigate('LoxoneConnection');
-  };
 
 
 
@@ -415,10 +378,6 @@ export default function LoxoneConfigScreen() {
   // ─── Sensor picker (Phase 2.2) ──────────────────────────────────
   const [pickerVisible, setPickerVisible] = useState(false);
   const openPicker = () => {
-    if (!host) {
-      Alert.alert('Fehler', 'Bitte zuerst eine Verbindung konfigurieren.');
-      return;
-    }
     setPickerVisible(true);
   };
   const handleSensorPicked = async (sensor: { uuid: string; name: string }) => {
@@ -450,10 +409,7 @@ export default function LoxoneConfigScreen() {
           Wetterprognose und aktuelle Messwerte für den gewählten Standort.
         </Text>
 
-        {/* Master enable + Connection summary — combined card. Top row
-            has the Loxone master toggle, bottom row is the connection
-            summary (label + Aktiv status + chevron) that navigates to
-            LoxoneConnection. */}
+        {/* Master enable */}
         <View style={styles.section}>
           <View style={styles.toggleRow}>
             <View style={styles.toggleLabel}>
@@ -468,22 +424,6 @@ export default function LoxoneConfigScreen() {
             />
           </View>
 
-          <View style={styles.connectionSeparator} />
-
-          <TouchableOpacity
-            style={styles.connectionCardRow}
-            onPress={openConnectionEdit}
-            accessibilityRole="button"
-            accessibilityLabel="Verbindung bearbeiten"
-          >
-            <View style={styles.connectionCardMain}>
-              <Text style={styles.connectionCardLabel}>Verbindung</Text>
-            </View>
-            {enabled && (
-              <Text style={styles.connectionCardActive}>Aktiv</Text>
-            )}
-            <Text style={styles.connectionCardChevron}>›</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Sensor list (Phase 2.1) */}
@@ -620,7 +560,7 @@ export default function LoxoneConfigScreen() {
           <View style={styles.infoSection}>
             <Text style={styles.infoTitle}>Hinweise:</Text>
             <Text style={styles.infoText}>
-              • Verbindung oben konfigurieren (Adresse, Zugangsdaten){'\n'}
+              • Der Miniserver ist auf dem Server hinterlegt{'\n'}
               • App-Schalter: zeigt den Sensor in der Smart-Home-Tab{'\n'}
               • Widget-Schalter: zeigt den Sensor im iOS-Widget
             </Text>
@@ -642,9 +582,8 @@ export default function LoxoneConfigScreen() {
 /**
  * LoxoneSensorPicker — modal that scans the configured Loxone Miniserver
  * for temperature sensors and lets the user add one to the configured list.
- * Reads its own credentials + Miniserver address from SharedStorage so the
- * parent doesn't need to forward them. Already-configured UUIDs are
- * filtered out so the user can't add duplicates.
+ * Already-configured UUIDs are filtered out so the user can't add
+ * duplicates.
  *
  * Phase 2.2: name = Loxone name on add (D6 pre-fill, editable later).
  * Filters by name / room / type via a search field.
@@ -673,18 +612,7 @@ function LoxoneSensorPicker({
     (async () => {
       setLoading(true);
       try {
-        const cfg = await SharedStorage.getLoxoneConfig();
-        if (!cfg) {
-          Alert.alert('Nicht konfiguriert', 'Bitte zuerst die Loxone Verbindung konfigurieren.');
-          return;
-        }
-        const api = new LoxoneAPI({
-          host: cfg.host,
-          protocol: cfg.protocol,
-          username: cfg.username,
-          password: cfg.password,
-        });
-        const found = await api.getTemperatureSensors();
+        const found = await LoxoneAPI.getTemperatureSensors();
         if (cancelled) return;
         const available = found.filter((s) => !existingUuids.includes(s.uuid));
         setSensors(available);

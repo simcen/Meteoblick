@@ -56,4 +56,12 @@ test.describe('Weather API', () => {
     const data = await response.json();
     expect(data).toHaveProperty('backend');
   });
+
+  test('API endpoints reject requests with a wrong API token', async ({ request }) => {
+    const response = await request.get('/api/weather/1', {
+      headers: { Authorization: 'Bearer wrong-token' },
+    });
+
+    expect(response.status()).toBe(401);
+  });
 });

@@ -1,9 +1,8 @@
 import SharedGroupPreferences from 'react-native-shared-group-preferences';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { APP_GROUP_ID, API_BASE_URL, POI_STORAGE_KEY, WEATHER_DATA_KEY, WIDGET_LAST_REFRESH_KEY, WIDGET_LOXONE_CONFIG_KEY, WIDGET_LOXONE_SENSOR_DATA_KEY, WIDGET_TIMELINE_CALLED_KEY, WIDGET_SNAPSHOT_WRITTEN_AT_KEY, THEME_PREFERENCE_KEY } from '../constants';
+import { APP_GROUP_ID, API_BASE_URL, API_TOKEN, POI_STORAGE_KEY, WEATHER_DATA_KEY, WIDGET_LAST_REFRESH_KEY, WIDGET_LOXONE_CONFIG_KEY, WIDGET_LOXONE_SENSOR_DATA_KEY, WIDGET_TIMELINE_CALLED_KEY, WIDGET_SNAPSHOT_WRITTEN_AT_KEY, THEME_PREFERENCE_KEY } from '../constants';
 import type { WeatherData } from '../types/weather';
 import type { POI } from '../types/poi';
-import { buildLoxoneBaseURL, type LoxoneProtocol } from '../api/loxone';
 
 export type ThemePreference = 'system' | 'light' | 'dark';
 
@@ -23,7 +22,10 @@ const POI_CACHE_KEY = 'meteoblick_poi_cache';
 // ─── Loxone multi-sensor types & migration helper ───────────────────
 //
 // Storage schema (multi-sensor):
-//   { host, protocol, username, password, sensors: Sensor[], enabled }
+//   { sensors: Sensor[], enabled }
+//
+// The Miniserver address and credentials are configured on the backend —
+// nothing about the connection is stored on the device.
 //
 // Each Sensor:
 //   { uuid, name, showInApp, showInWidget, order }
@@ -42,10 +44,6 @@ type Sensor = {
 };
 
 export type LoxoneConfig = {
-  host: string; // IP or DNS name of the Miniserver, optional ":port"
-  protocol: LoxoneProtocol;
-  username: string;
-  password: string;
   sensors: Sensor[];
   enabled: boolean;
   // Phase 5+: per-user Lock Screen widget config.
@@ -56,9 +54,6 @@ export type LoxoneConfig = {
 
 // Legacy shape (kept only for migration detection).
 type LegacyLoxoneConfig = {
-  cloudAddress: string;
-  username: string;
-  password: string;
   temperatureSensorUUID?: string;
   temperatureSensorName?: string;
   enabled: boolean;
@@ -206,10 +201,6 @@ async getLoxoneConfig(): Promise<LoxoneConfig | null> {
     // Migration: legacy single-sensor → array shape.
     if (isLegacyShape(raw)) {
       const migrated: LoxoneConfig = {
-        host: '',
-        protocol: 'http',
-        username: raw.username,
-        password: raw.password,
         enabled: raw.enabled,
         sensors: [
           {
@@ -222,16 +213,15 @@ async getLoxoneConfig(): Promise<LoxoneConfig | null> {
         ],
       };
       // Persist migrated shape; from now on the legacy branch is skipped.
-      await AsyncStorage.setItem('loxone_config', JSON.stringify(migrated));
+      await SharedStorage.setLoxoneConfig(migrated);
       return migrated;
     }
 
-    // Migration: cloud serial number → network address. The address has to
-    // be entered once; credentials and sensors are kept.
-    if (typeof raw.host !== 'string') {
-      const { cloudAddress: _cloudAddress, ...rest } = raw;
-      const migrated: LoxoneConfig = { ...rest, host: '', protocol: 'http' };
-      await AsyncStorage.setItem('loxone_config', JSON.stringify(migrated));
+    // Migration: the connection moved to the backend. Drop the address and
+    // credentials from the device, including the widget's App Group copy.
+    if ('username' in raw || 'password' in raw) {
+      const { cloudAddress, host, protocol, username, password, ...migrated } = raw;
+      await SharedStorage.setLoxoneConfig(migrated);
       return migrated;
     }
 
@@ -255,17 +245,13 @@ async setLoxoneConfig(config: LoxoneConfig): Promise<void> {
       // /api/widget/timeline?poiId=... without needing the host app.
       const poiId = (await SharedStorage.getPointId()) ?? '';
       const apiBaseUrl = API_BASE_URL;
-      // Mirror: credentials + ALL showInWidget sensor UUIDs + POI.
+      // Mirror: API token + ALL showInWidget sensor UUIDs + POI.
       // Phase 4b+: widget TimelineProvider fetches all data itself on every
       // timeline reload — calls /api/widget/timeline for weather and
       // LoxoneWidgetClient for multi-sensor. The App continues to write
       // snapshots opportunistically (foreground / BG fetch / pull-to-refresh)
       // as a fallback for the widget when iOS throttles timeline refreshes.
       const widgetConfig = {
-        // Empty string signals "no address yet" → widget skips Loxone.
-        baseUrl: config.host ? buildLoxoneBaseURL(config.protocol, config.host) : '',
-        username: config.username,
-        password: config.password,
         showInWidgetSensorUuids: config.sensors
           .filter((s) => s.showInWidget)
           .map((s) => s.uuid),
@@ -274,6 +260,7 @@ async setLoxoneConfig(config: LoxoneConfig): Promise<void> {
         // Empty string signals "not configured" → widget keeps cached snapshot.
         poiId,
         apiBaseUrl,
+        apiToken: API_TOKEN,
         // Phase 5+: per-user Lock Screen widget config.
         // 'weather' (default) shows MeteoSwiss; a sensor UUID shows that
         // specific sensor. The widget picks the right value at render time.
@@ -303,8 +290,7 @@ async setLoxoneConfig(config: LoxoneConfig): Promise<void> {
 // callers can update local state without a second fetch.
 
 async addSensor(sensor: Omit<Sensor, 'order'>): Promise<LoxoneConfig | null> {
-  const config = await this.getLoxoneConfig();
-  if (!config) return null;
+  const config = (await this.getLoxoneConfig()) ?? { enabled: false, sensors: [] };
   const maxOrder = config.sensors.reduce((max, s) => Math.max(max, s.order), -1);
   const next: Sensor = { ...sensor, order: maxOrder + 1 };
   await this.setLoxoneConfig({ ...config, sensors: [...config.sensors, next] });
@@ -377,32 +363,6 @@ async reorderSensors(orderedUuids: string[]): Promise<LoxoneConfig | null> {
     } catch (error) {
       console.error('Failed to save Loxone sensor data:', error);
       throw error;
-    }
-  },
-
-  /**
-   * Widget-readable Loxone config. The host app writes this on every
-   * config change so the iOS Widget Extension can fetch the Loxone
-   * temperature independently of the host app.
-   *
-   * Only populated when Loxone is enabled — see setLoxoneConfig above.
-   */
-  async getLoxoneConfigForWidget(): Promise<{
-    baseUrl: string;
-    username: string;
-    password: string;
-    temperatureSensorUUID?: string;
-  } | null> {
-    try {
-      const json = await SharedGroupPreferences.getItem(
-        WIDGET_LOXONE_CONFIG_KEY,
-        APP_GROUP_ID,
-      );
-      if (!json) return null;
-      return JSON.parse(json);
-    } catch (error) {
-      console.error('Failed to read widget Loxone config:', error);
-      return null;
     }
   },
 

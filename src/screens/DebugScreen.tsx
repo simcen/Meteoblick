@@ -9,7 +9,8 @@ import { LoxoneAPI } from '../api/loxone';
 import { updateWidget } from '../widgets/widgetManager';
 import { Button } from '../components/Button';
 import { LiquidGlassCloseButton } from '../components/LiquidGlassCloseButton';
-import { BUILD_NUMBER, API_BASE_URL } from '../constants';
+import { BUILD_NUMBER } from '../constants';
+import { apiFetch } from '../api/client';
 import { Spacing, Typography, Layout } from '../constants/designSystem';
 import { useScrollContext } from '../contexts/ScrollContext';
 import { useColors } from '../hooks/useColors';
@@ -150,7 +151,7 @@ export default function DebugScreen() {
 
     // Load backend debug info
     try {
-      const response = await fetch(`${API_BASE_URL}/api/debug`);
+      const response = await apiFetch('/api/debug');
       const data = await response.json();
       setBackendDebugInfo(data);
     } catch (error) {
@@ -205,8 +206,7 @@ export default function DebugScreen() {
     if (loxoneConfig?.enabled && appSensors.length > 0) {
       const now = new Date().toISOString();
       try {
-        const api = new LoxoneAPI(loxoneConfig);
-        const results = await api.getTemperatures(appSensors.map((s) => s.uuid));
+        const results = await LoxoneAPI.getTemperatures(appSensors.map((s) => s.uuid));
         const readings = results.map((r) => ({ uuid: r.uuid, temperature: r.temperature, timestamp: now }));
         await SharedStorage.setLoxoneSensorData(readings);
         const primary = readings.find((r) => r.uuid === appSensors[0].uuid) ?? readings[0];
@@ -363,22 +363,6 @@ export default function DebugScreen() {
             </View>
             {loxoneConfig && (
               <>
-                <View style={styles.debugRow}>
-                  <Text style={styles.debugLabel}>Adresse:</Text>
-                  <Text style={styles.debugValue}>
-                    {loxoneConfig.host ? `${loxoneConfig.protocol}://${loxoneConfig.host}` : '—'}
-                  </Text>
-                </View>
-                <View style={styles.debugRow}>
-                  <Text style={styles.debugLabel}>Username:</Text>
-                  <Text style={styles.debugValue}>{loxoneConfig.username}</Text>
-                </View>
-                {loxoneConfig.localIP && (
-                  <View style={styles.debugRow}>
-                    <Text style={styles.debugLabel}>Lokale IP:</Text>
-                    <Text style={styles.debugValue}>{loxoneConfig.localIP}</Text>
-                  </View>
-                )}
                 <View style={styles.debugRow}>
                   <Text style={styles.debugLabel}>Sensor UUID:</Text>
                   <Text style={[styles.debugValue, styles.uuidText]} numberOfLines={1}>

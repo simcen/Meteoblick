@@ -218,18 +218,15 @@ export function WeatherProvider({ children }: WeatherProviderProps) {
       keys: loxoneConfig ? Object.keys(loxoneConfig) : null,
       enabled: loxoneConfig?.enabled,
       sensorCount: loxoneConfig?.sensors.filter((s) => s.showInApp).length ?? 0,
-      username: loxoneConfig?.username,
-      host: loxoneConfig?.host,
     });
     // Phase 3: fetch all showInApp sensors in parallel.
     const configuredAppSensors = loxoneConfig?.sensors.filter((s) => s.showInApp) ?? [];
     appSensors.push(...configuredAppSensors.map((s) => ({ uuid: s.uuid, name: s.name, order: s.order })));
-    if (loxoneConfig?.enabled && loxoneConfig.host && configuredAppSensors.length > 0) {
+    if (loxoneConfig?.enabled && configuredAppSensors.length > 0) {
       const uuids = configuredAppSensors.map((s) => s.uuid);
       const now = new Date().toISOString();
       try {
-        const api = new LoxoneAPI(loxoneConfig);
-        const results = await api.getTemperatures(uuids);
+        const results = await LoxoneAPI.getTemperatures(uuids);
         readings = results.map((r) => ({ uuid: r.uuid, temperature: r.temperature, timestamp: now }));
         await SharedStorage.setLoxoneSensorData(readings);
         // Primary sensor (first showInApp) for legacy widget mirror

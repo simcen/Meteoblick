@@ -42,7 +42,8 @@ describe('MeteoSwissAPI', () => {
       });
 
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/weather/1')
+        expect.stringContaining('/api/weather/1'),
+        expect.anything(),
       );
     });
 
@@ -117,7 +118,8 @@ describe('MeteoSwissAPI', () => {
       });
 
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/pois?search=Frauen')
+        expect.stringContaining('/api/pois?search=Frauen'),
+        expect.anything(),
       );
     });
 
@@ -131,10 +133,12 @@ describe('MeteoSwissAPI', () => {
 
       expect(result).toHaveLength(2);
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/pois')
+        expect.stringContaining('/api/pois'),
+        expect.anything(),
       );
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.not.stringContaining('?search=')
+        expect.not.stringContaining('?search='),
+        expect.anything(),
       );
     });
 
@@ -159,7 +163,8 @@ describe('MeteoSwissAPI', () => {
       await MeteoSwissAPI.fetchPOIList('Zürich & Bern');
 
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining(encodeURIComponent('Zürich & Bern'))
+        expect.stringContaining(encodeURIComponent('Zürich & Bern')),
+        expect.anything(),
       );
     });
   });
